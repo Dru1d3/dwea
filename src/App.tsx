@@ -21,7 +21,8 @@ import { ChatPanel } from './ui/ChatPanel.js';
 import { SettingsDialog } from './ui/SettingsDialog.js';
 import { useChat } from './ui/useChat.js';
 
-const cameraInitialPosition: [number, number, number] = [2.4, 1.2, 4];
+// Eye height ~1.7 m, set back ~10 m, slightly above to read as 'standing in a world'.
+const cameraInitialPosition: [number, number, number] = [6, 2.4, 10];
 
 function readSceneIdFromHash(): string {
   const raw = window.location.hash.replace(/^#\/?/, '').trim();
@@ -86,11 +87,15 @@ export function App() {
       <Canvas
         style={{ position: 'fixed', inset: 0, width: '100vw', height: '100vh' }}
         dpr={[1, 2]}
-        gl={{ antialias: false, powerPreference: 'high-performance' }}
-        camera={{ position: cameraInitialPosition, fov: 50, near: 0.1, far: 100 }}
+        gl={{ antialias: true, powerPreference: 'high-performance' }}
+        camera={{ position: cameraInitialPosition, fov: 60, near: 0.1, far: 1000 }}
       >
-        <color attach="background" args={['#05060a']} />
-        <fog attach="fog" args={['#05060a', 18, 36]} />
+        {/* Pale-sky background; the analytic <Sky> draws over this for views
+            above the horizon, this colour shows below for grazing angles. */}
+        <color attach="background" args={['#cfe2f3']} />
+        {/* Soft atmospheric depth — very gentle, kicks in past 60 m so the
+            world does not feel boxed-in. */}
+        <fog attach="fog" args={['#cfe2f3', 60, 280]} />
         <Environment groundY={navigation.groundY} />
         <Suspense fallback={null}>
           <SplatScene src={src} transform={transform} />

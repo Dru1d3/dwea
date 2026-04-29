@@ -23,7 +23,7 @@ export interface NpcProps {
 export function Npc({
   position,
   target,
-  groundY = -1.6,
+  groundY = 0,
   onPositionChange,
   onTargetReached,
 }: NpcProps) {

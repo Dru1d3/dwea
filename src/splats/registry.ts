@@ -12,12 +12,22 @@ export type SplatSource =
   | { readonly kind: 'remote'; readonly url: string };
 
 /**
- * Per-scene transform applied to the rendered splat group. All fields are
- * optional and fall back to the renderer defaults (see DEFAULT_TRANSFORM).
+ * Per-scene transform applied to the rendered splat group.
  *
- * `rotation` is Euler XYZ in radians. The renderer already needs `[Math.PI, 0, 0]`
- * for the legacy cakewalk/splat-data convention (Y-down → Y-up); the transform
- * here REPLACES that wrapper, so any new asset must include the flip if needed.
+ * World convention (see ADR 0007):
+ *   - Right-handed, Y-up. 1 world unit = 1 metre.
+ *   - Ground plane at Y = 0. Camera eye height roughly 1.7 m.
+ *   - +Z is "out of the screen" / toward the viewer (three.js default).
+ *
+ * Splat convention:
+ *   - cakewalk/splat-data antimatter15-format splats render Y-up as-is, so
+ *     the default rotation is identity. Earlier revisions wrapped a 180° X
+ *     flip here under the assumption that the data was Y-down — that
+ *     assumption was wrong and made the world render upside down. See
+ *     [DWEA-11](/DWEA/issues/DWEA-11).
+ *   - World Labs Marble exports use OpenCV (Y-down). Marble assets MUST
+ *     opt back into the X-flip via `rotation: [Math.PI, 0, 0]`. Keep that
+ *     local to the asset, not in the default.
  */
 export type SplatTransform = {
   readonly scale?: number;
@@ -27,32 +37,31 @@ export type SplatTransform = {
 
 /**
  * Per-scene navigation tuning. Overrides the global defaults in
- * `src/npc/movement.ts` so a small staged scene (plush) and a sprawling
- * outdoor splat (garden) can each feel right at default camera.
+ * `src/npc/movement.ts`.
  */
 export type SplatNavigation = {
-  /** World Y of the ground plane / grid for this scene. */
+  /** World Y of the ground plane / grid for this scene (metres). */
   readonly groundY?: number;
-  /** Where Mara spawns on a fresh load (XZ). */
+  /** Where Mara spawns on a fresh load (XZ, metres). */
   readonly npcSpawn?: { readonly x: number; readonly z: number };
-  /** Radius of the click-to-walk disk centred on origin. */
+  /** Radius of the click-to-walk disk centred on origin (metres). */
   readonly clickRadius?: number;
-  /** Wander radius around origin used by the idle wander timer. */
+  /** Wander radius around origin used by the idle wander timer (metres). */
   readonly wanderRadius?: number;
 };
 
 export const DEFAULT_TRANSFORM = {
   scale: 1,
   position: [0, 0, 0] as const,
-  // cakewalk/splat-data convention: stored Y-down, flipped here to Y-up.
-  rotation: [Math.PI, 0, 0] as const,
+  // Identity. cakewalk antimatter15-format splats render Y-up as-is.
+  rotation: [0, 0, 0] as const,
 };
 
 export const DEFAULT_NAVIGATION = {
-  groundY: -1.6,
-  npcSpawn: { x: -1.2, z: 1.2 },
-  clickRadius: 6,
-  wanderRadius: 1.5,
+  groundY: 0,
+  npcSpawn: { x: -1.5, z: 1.5 },
+  clickRadius: 12,
+  wanderRadius: 3,
 };
 
 export const splatRegistry: readonly SplatAsset[] = [
@@ -66,16 +75,18 @@ export const splatRegistry: readonly SplatAsset[] = [
     credit:
       'cakewalk/splat-data on Hugging Face — Mip-NeRF 360 "garden" scene (Barron et al., 2022). Research/demo use.',
     transform: {
-      // Mip-NeRF 360 captures are ~real-world metric; scale down to fit our orbit.
-      scale: 0.45,
-      position: [0, -1.6, 0],
-      rotation: [Math.PI, 0, 0],
+      // Mip-NeRF 360 captures are roughly metric. Render at 1:1 scale.
+      // Splat origin sits well above the captured ground; nudge down so
+      // the table-top reads near our world ground (Y=0).
+      scale: 1,
+      position: [0, -1.2, 0],
+      rotation: [0, 0, 0],
     },
     navigation: {
-      groundY: -1.6,
-      npcSpawn: { x: 0.0, z: 0.6 },
-      clickRadius: 7,
-      wanderRadius: 2.4,
+      groundY: 0,
+      npcSpawn: { x: 0, z: 1.5 },
+      clickRadius: 14,
+      wanderRadius: 4,
     },
   },
   {
@@ -88,15 +99,15 @@ export const splatRegistry: readonly SplatAsset[] = [
     credit:
       'cakewalk/splat-data on Hugging Face — Mip-NeRF 360 "treehill" scene (Barron et al., 2022). Research/demo use.',
     transform: {
-      scale: 0.45,
-      position: [0, -1.6, 0],
-      rotation: [Math.PI, 0, 0],
+      scale: 1,
+      position: [0, -1.2, 0],
+      rotation: [0, 0, 0],
     },
     navigation: {
-      groundY: -1.6,
-      npcSpawn: { x: 0.0, z: 0.6 },
-      clickRadius: 7,
-      wanderRadius: 2.4,
+      groundY: 0,
+      npcSpawn: { x: 0, z: 1.5 },
+      clickRadius: 16,
+      wanderRadius: 5,
     },
   },
   {
@@ -107,6 +118,19 @@ export const splatRegistry: readonly SplatAsset[] = [
       url: 'https://huggingface.co/cakewalk/splat-data/resolve/main/nike.splat',
     },
     credit: 'cakewalk/splat-data on Hugging Face — drei <Splat> canonical demo asset.',
+    transform: {
+      // Object-scale capture; bump it up and lift it off the ground a bit
+      // so it reads as a "sculpture" sitting in the open world.
+      scale: 1.5,
+      position: [0, 0.6, 0],
+      rotation: [0, 0, 0],
+    },
+    navigation: {
+      groundY: 0,
+      npcSpawn: { x: -1.5, z: 1.5 },
+      clickRadius: 10,
+      wanderRadius: 3,
+    },
   },
   {
     id: 'plush',
@@ -114,6 +138,17 @@ export const splatRegistry: readonly SplatAsset[] = [
     source: { kind: 'public', path: 'splats/plush.splat' },
     credit:
       'cakewalk/splat-data on Hugging Face — derived from the 3D Gaussian Splatting paper test scenes. Research/demo use; replace before commercial deployment.',
+    transform: {
+      scale: 1.5,
+      position: [0, 0.4, 0],
+      rotation: [0, 0, 0],
+    },
+    navigation: {
+      groundY: 0,
+      npcSpawn: { x: -1.2, z: 1.2 },
+      clickRadius: 8,
+      wanderRadius: 2.5,
+    },
   },
 ] as const;
 
