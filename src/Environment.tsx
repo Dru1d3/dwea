@@ -1,15 +1,17 @@
 import { Grid } from '@react-three/drei';
 
-const GROUND_Y = -1.6;
+export type EnvironmentProps = {
+  readonly groundY?: number;
+};
 
-export function Environment() {
+export function Environment({ groundY = -1.6 }: EnvironmentProps) {
   return (
     <>
       <ambientLight intensity={0.6} />
       <hemisphereLight args={['#cdd5ff', '#1a1a22', 0.5]} />
       <directionalLight position={[5, 8, 4]} intensity={0.9} />
       <Grid
-        position={[0, GROUND_Y, 0]}
+        position={[0, groundY, 0]}
         args={[40, 40]}
         cellSize={0.5}
         cellThickness={0.6}

@@ -98,6 +98,10 @@ A typed registry of `SplatAsset[]`:
 ```ts
 { id: 'plush', label: 'Plush toy', source: { kind: 'public', path: 'splats/plush.splat' } }
 { id: 'nike',  label: 'Nike (drei sample)', source: { kind: 'remote', url: 'https://…/nike.splat' } }
+{ id: 'garden', label: 'Garden',
+  source: { kind: 'remote', url: 'https://…/garden.splat' },
+  transform: { scale: 0.45, position: [0, -1.6, 0], rotation: [Math.PI, 0, 0] },
+  navigation: { groundY: -1.6, npcSpawn: { x: 0, z: 0.6 }, clickRadius: 7, wanderRadius: 2.4 } }
 ```
 
 Two source kinds:
@@ -113,8 +117,67 @@ vice versa) is a single line in the registry.
 
 Routing wires it together: `App.tsx` reads `window.location.hash` to pick
 the active asset id, looks it up in the registry, and renders
-`<SplatScene src={…} />`. Two scenes ship today: `#/nike` (existing public
-sample, unchanged) and `#/plush` (the first asset added via this pipeline).
+`<SplatScene src={…} transform={…} />` with per-scene navigation passed to
+the NPC, click plane, and grid environment. Scenes shipping today:
+`#/garden` (default cold-load), `#/treehill`, `#/nike`, `#/plush`.
+
+### Per-scene transforms (DWEA-8)
+
+Captured assets do not share a coordinate system. A 9 MB plush from the
+3DGS test scenes happens to fit our default camera at scale 1; a 186 MB
+Mip-NeRF 360 outdoor capture comes in real-world metres and lands well
+outside the orbit unless we shrink it. We resolved this with two optional
+fields on `SplatAsset`:
+
+```ts
+type SplatTransform = {
+  readonly scale?: number;                              // default 1
+  readonly position?: readonly [number, number, number]; // default [0,0,0]
+  readonly rotation?: readonly [number, number, number]; // default [Math.PI, 0, 0]
+};
+
+type SplatNavigation = {
+  readonly groundY?: number;                            // default -1.6
+  readonly npcSpawn?: { readonly x: number; readonly z: number };
+  readonly clickRadius?: number;                        // default 6
+  readonly wanderRadius?: number;                       // default 1.5
+};
+```
+
+Why on the asset rather than wrapped around `<SplatScene>`:
+
+- The transform is a property of the capture, not of the page. Two pages
+  showing `garden` should render it the same way — colocate the values
+  with the asset.
+- Navigation tuning is per-scene too: ground Y of the splat controls
+  where the click plane and idle bob sit. Keeping that next to the
+  transform avoids the "two registries" problem where transform and
+  navigation drift out of sync.
+- Defaults preserve DWEA-3 behaviour: any asset without `transform` or
+  `navigation` keeps the previous Y-flip wrapper and the original ground
+  height. `nike` and `plush` ship without overrides and still render at
+  their pre-DWEA-8 quality.
+
+The default rotation `[Math.PI, 0, 0]` matches the cakewalk/splat-data
+convention (Y-down stored, Y-up rendered). Captures from other tools
+(Polycam, Luma exports, our own future captures) will set their own
+rotation. The transform group is `<group rotation={…} position={…}
+scale={…}><Splat …/></group>`, which keeps `<Splat>` itself on the drei
+happy path and avoids any custom splat math.
+
+Per-scene navigation flows through:
+
+- `<Environment groundY={…} />` — Y of the synthetic grid.
+- `<GroundClickPlane groundY={…} radius={…} />` — Y and reach of the
+  click-to-walk disc.
+- `<Npc groundY={…} />` — base height for the idle bob.
+- `useNpcState({ initialPosition, wanderRadius, sceneKey })` — spawn
+  point, idle wander reach, and a respawn key so swapping scenes resets
+  Mara cleanly instead of stranding her in the previous scene's coords.
+
+This kept the scope tight: no new component, no routing change, and no
+extra registry. Adding a future capture is still "edit `registry.ts`"
+plus optional scene tuning.
 
 ## Real-world asset shipped: `plush`
 

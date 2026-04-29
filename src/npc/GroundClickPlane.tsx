@@ -1,5 +1,4 @@
 import type { ThreeEvent } from '@react-three/fiber';
-import { SCENE_GROUND_Y } from './movement.js';
 import type { Vec2 } from './types.js';
 
 /**
@@ -9,10 +8,12 @@ import type { Vec2 } from './types.js';
  */
 export interface GroundClickPlaneProps {
   onPick: (point: Vec2) => void;
+  /** Y of the click plane in world units. Should match the scene's ground. */
+  groundY?: number;
   radius?: number;
 }
 
-export function GroundClickPlane({ onPick, radius = 6 }: GroundClickPlaneProps) {
+export function GroundClickPlane({ onPick, groundY = -1.6, radius = 6 }: GroundClickPlaneProps) {
   const handle = (event: ThreeEvent<MouseEvent>) => {
     event.stopPropagation();
     onPick({ x: event.point.x, z: event.point.z });
@@ -22,7 +23,7 @@ export function GroundClickPlane({ onPick, radius = 6 }: GroundClickPlaneProps) 
     // biome-ignore lint/a11y/useKeyWithClickEvents: 3D scene click; keyboard isn't applicable to a raycast surface.
     <mesh
       rotation={[-Math.PI / 2, 0, 0]}
-      position={[0, SCENE_GROUND_Y + 0.001, 0]}
+      position={[0, groundY + 0.001, 0]}
       onClick={handle}
       onPointerOver={() => {
         document.body.style.cursor = 'crosshair';

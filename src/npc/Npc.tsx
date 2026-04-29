@@ -1,7 +1,7 @@
 import { useFrame } from '@react-three/fiber';
 import { useRef } from 'react';
 import type { Group } from 'three';
-import { idleBob, stepTowardTarget } from './movement.js';
+import { NPC_FLOAT_OFFSET, idleBob, stepTowardTarget } from './movement.js';
 import type { Vec2 } from './types.js';
 
 /**
@@ -15,11 +15,18 @@ import type { Vec2 } from './types.js';
 export interface NpcProps {
   position: Vec2;
   target: Vec2 | null;
+  groundY?: number;
   onPositionChange: (next: Vec2) => void;
   onTargetReached: () => void;
 }
 
-export function Npc({ position, target, onPositionChange, onTargetReached }: NpcProps) {
+export function Npc({
+  position,
+  target,
+  groundY = -1.6,
+  onPositionChange,
+  onTargetReached,
+}: NpcProps) {
   const group = useRef<Group>(null);
   const elapsed = useRef(0);
 
@@ -37,7 +44,7 @@ export function Npc({ position, target, onPositionChange, onTargetReached }: Npc
     if (group.current) {
       group.current.position.x = next.x;
       group.current.position.z = next.z;
-      group.current.position.y = idleBob(elapsed.current);
+      group.current.position.y = idleBob(elapsed.current, groundY + NPC_FLOAT_OFFSET);
 
       // Face direction of travel when walking.
       if (target && !reached) {

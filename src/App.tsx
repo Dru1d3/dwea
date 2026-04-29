@@ -9,7 +9,14 @@ import { loadApiKey, saveApiKey } from './llm/storage.js';
 import { GroundClickPlane } from './npc/GroundClickPlane.js';
 import { Npc } from './npc/Npc.js';
 import { useNpcState } from './npc/state.js';
-import { defaultSplatId, findSplat, resolveSplatUrl, splatRegistry } from './splats/registry.js';
+import {
+  defaultSplatId,
+  findSplat,
+  resolveNavigation,
+  resolveSplatUrl,
+  resolveTransform,
+  splatRegistry,
+} from './splats/registry.js';
 import { ChatPanel } from './ui/ChatPanel.js';
 import { SettingsDialog } from './ui/SettingsDialog.js';
 import { useChat } from './ui/useChat.js';
@@ -45,8 +52,14 @@ export function App() {
   }
 
   const src = resolveSplatUrl(asset, import.meta.env.BASE_URL);
+  const transform = resolveTransform(asset);
+  const navigation = resolveNavigation(asset);
 
-  const npc = useNpcState();
+  const npc = useNpcState({
+    initialPosition: navigation.npcSpawn,
+    wanderRadius: navigation.wanderRadius,
+    sceneKey: asset.id,
+  });
   const [apiKey, setApiKey] = useState<string>(() => loadApiKey());
   const [settingsOpen, setSettingsOpen] = useState<boolean>(() => loadApiKey() === '');
 
@@ -78,17 +91,22 @@ export function App() {
       >
         <color attach="background" args={['#05060a']} />
         <fog attach="fog" args={['#05060a', 18, 36]} />
-        <Environment />
+        <Environment groundY={navigation.groundY} />
         <Suspense fallback={null}>
-          <SplatScene src={src} />
+          <SplatScene src={src} transform={transform} />
         </Suspense>
         <Npc
           position={npc.position}
           target={npc.target}
+          groundY={navigation.groundY}
           onPositionChange={npc.setPosition}
           onTargetReached={npc.clearTarget}
         />
-        <GroundClickPlane onPick={(p) => npc.setTarget(p, { fromUserClick: true })} />
+        <GroundClickPlane
+          groundY={navigation.groundY}
+          radius={navigation.clickRadius}
+          onPick={(p) => npc.setTarget(p, { fromUserClick: true })}
+        />
         <CameraRig />
       </Canvas>
       <Hud />

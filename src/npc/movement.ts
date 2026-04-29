@@ -4,9 +4,12 @@ export const NPC_WALK_SPEED = 1.5; // world units per second
 export const NPC_TARGET_REACHED_EPSILON = 0.05;
 export const NPC_BOB_AMPLITUDE = 0.08;
 export const NPC_BOB_FREQUENCY = 1.4; // hz
-// Mara sits ~0.6 above the synthetic ground grid (Environment.tsx GROUND_Y = -1.6).
+// Mara floats ~0.6 above the scene's ground plane. The default ground sits at
+// -1.6 (matches the synthetic grid in Environment.tsx); per-scene overrides
+// come from the splat registry's `navigation.groundY`.
 export const SCENE_GROUND_Y = -1.6;
-export const NPC_BASE_HEIGHT = SCENE_GROUND_Y + 0.6;
+export const NPC_FLOAT_OFFSET = 0.6;
+export const NPC_BASE_HEIGHT = SCENE_GROUND_Y + NPC_FLOAT_OFFSET;
 
 /**
  * Pure step function — given current position, optional target, and elapsed
@@ -47,10 +50,12 @@ export function stepTowardTarget(
 
 /**
  * Vertical idle bob. Decoupled from walk motion so we can stack the two.
+ * `baseHeight` defaults to the synthetic-grid scene height; pass a per-scene
+ * value (groundY + NPC_FLOAT_OFFSET) for splat scenes with a different ground.
  */
-export function idleBob(elapsedSeconds: number): number {
+export function idleBob(elapsedSeconds: number, baseHeight: number = NPC_BASE_HEIGHT): number {
   return (
-    NPC_BASE_HEIGHT + Math.sin(elapsedSeconds * NPC_BOB_FREQUENCY * Math.PI * 2) * NPC_BOB_AMPLITUDE
+    baseHeight + Math.sin(elapsedSeconds * NPC_BOB_FREQUENCY * Math.PI * 2) * NPC_BOB_AMPLITUDE
   );
 }
 
