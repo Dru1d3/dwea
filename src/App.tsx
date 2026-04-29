@@ -1,10 +1,18 @@
 import { Canvas } from '@react-three/fiber';
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { CameraRig } from './CameraRig.js';
 import { Environment } from './Environment.js';
 import { Hud } from './Hud.js';
 import { SplatScene } from './SplatScene.js';
+import type { SceneState } from './llm/anthropic.js';
+import { loadApiKey, saveApiKey } from './llm/storage.js';
+import { GroundClickPlane } from './npc/GroundClickPlane.js';
+import { Npc } from './npc/Npc.js';
+import { useNpcState } from './npc/state.js';
 import { defaultSplatId, findSplat, resolveSplatUrl, splatRegistry } from './splats/registry.js';
+import { ChatPanel } from './ui/ChatPanel.js';
+import { SettingsDialog } from './ui/SettingsDialog.js';
+import { useChat } from './ui/useChat.js';
 
 const cameraInitialPosition: [number, number, number] = [2.4, 1.2, 4];
 
@@ -38,6 +46,28 @@ export function App() {
 
   const src = resolveSplatUrl(asset, import.meta.env.BASE_URL);
 
+  const npc = useNpcState();
+  const [apiKey, setApiKey] = useState<string>(() => loadApiKey());
+  const [settingsOpen, setSettingsOpen] = useState<boolean>(() => loadApiKey() === '');
+
+  // Stable getter so useChat's `send` doesn't churn when Mara moves each frame.
+  const npcRef = useRef(npc);
+  npcRef.current = npc;
+  const getScene = useCallback<() => SceneState>(
+    () => ({
+      position: npcRef.current.position,
+      lastClickTarget: npcRef.current.lastClickTarget,
+    }),
+    [],
+  );
+
+  const chat = useChat({ apiKey, getScene });
+
+  const handleApiKeySave = useCallback((next: string) => {
+    saveApiKey(next);
+    setApiKey(next);
+  }, []);
+
   return (
     <>
       <Canvas
@@ -52,10 +82,32 @@ export function App() {
         <Suspense fallback={null}>
           <SplatScene src={src} />
         </Suspense>
+        <Npc
+          position={npc.position}
+          target={npc.target}
+          onPositionChange={npc.setPosition}
+          onTargetReached={npc.clearTarget}
+        />
+        <GroundClickPlane onPick={(p) => npc.setTarget(p, { fromUserClick: true })} />
         <CameraRig />
       </Canvas>
       <Hud />
       <SceneSwitcher currentId={asset.id} />
+      <ChatPanel
+        messages={chat.messages}
+        onSend={chat.send}
+        onOpenSettings={() => setSettingsOpen(true)}
+        lastFirstTokenMs={chat.lastFirstTokenMs}
+        averageFirstTokenMs={chat.averageFirstTokenMs}
+        hasApiKey={apiKey.length > 0}
+        busy={chat.busy}
+      />
+      <SettingsDialog
+        open={settingsOpen}
+        initialKey={apiKey}
+        onClose={() => setSettingsOpen(false)}
+        onSave={handleApiKeySave}
+      />
     </>
   );
 }
