@@ -12,8 +12,9 @@
 # Conventions enforced by this script:
 #   - <id> is lowercase, alphanumeric + dashes (used in URLs and registry keys).
 #   - The asset is copied verbatim to public/splats/<id>.<ext>, where <ext> is
-#     taken from the source. .splat and .ksplat are accepted; anything else
-#     fails fast.
+#     taken from the source. .splat and .ksplat are accepted directly; .ply
+#     is converted to .splat via scripts/ply-to-splat.mjs and the .splat is
+#     what gets stored. Anything else fails fast.
 #   - We hash the file (sha256) and print a registry stub the caller can paste
 #     into src/splats/registry.ts.
 #
@@ -40,37 +41,59 @@ repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 out_dir="$repo_root/public/splats"
 mkdir -p "$out_dir"
 
-# Resolve extension from source.
-ext="${src##*.}"
+# Resolve extension from source. Strip query/fragment for URL sources so
+# signed-URL params (Marble emits them) do not confuse the extension match.
+src_clean="${src%%\?*}"
+src_clean="${src_clean%%\#*}"
+ext="${src_clean##*.}"
+ext="${ext,,}"
 case "$ext" in
-  splat | ksplat) ;;
+  splat | ksplat | ply) ;;
   *)
-    echo "error: source must end in .splat or .ksplat (got .$ext)" >&2
+    echo "error: source must end in .splat, .ksplat, or .ply (got .$ext)" >&2
     exit 64
     ;;
 esac
 
-dest="$out_dir/$id.$ext"
+# Stored extension is always one of .splat / .ksplat. .ply is converted.
+stored_ext="$ext"
+if [[ "$ext" == "ply" ]]; then
+  stored_ext="splat"
+fi
+dest="$out_dir/$id.$stored_ext"
 
 if [[ -e "$dest" ]]; then
   echo "error: $dest already exists; remove it first or pick a new <id>" >&2
   exit 1
 fi
 
+if [[ "$ext" == "ply" ]]; then
+  staged="$(mktemp -t add-splat.XXXXXX.ply)"
+  trap 'rm -f "$staged"' EXIT
+else
+  staged="$dest"
+fi
+
 case "$src" in
   http://* | https://*)
     echo "fetching $src ..."
     # -L follow redirects (HF resolve URLs redirect to a CDN), -f fail on 4xx/5xx.
-    curl -fL --retry 3 --retry-delay 2 --max-time 300 -o "$dest" "$src"
+    # --max-time bumped to 900 because Marble PLY exports can be ~200 MB.
+    curl -fL --retry 3 --retry-delay 2 --max-time 900 -o "$staged" "$src"
     ;;
   *)
     if [[ ! -f "$src" ]]; then
       echo "error: local source not found: $src" >&2
       exit 1
     fi
-    cp "$src" "$dest"
+    cp "$src" "$staged"
     ;;
 esac
+
+if [[ "$ext" == "ply" ]]; then
+  echo "converting PLY -> SPLAT via scripts/ply-to-splat.mjs ..."
+  node "$repo_root/scripts/ply-to-splat.mjs" "$staged" "$dest"
+fi
 
 # Sanity-check size: a misconfigured Hugging Face URL or a 404 page would
 # cheerfully save as a tiny HTML file. Reject anything below 1 KB.
@@ -86,7 +109,7 @@ size_mb=$(awk -v b="$size_bytes" 'BEGIN { printf "%.1f", b/1024/1024 }')
 
 cat <<EOF
 
-added: public/splats/$id.$ext  ($size_mb MB, sha256 $sha)
+added: public/splats/$id.$stored_ext  ($size_mb MB, sha256 $sha)
 
 Next steps:
   1. Register the asset in src/splats/registry.ts:
@@ -94,9 +117,9 @@ Next steps:
        {
          id: '$id',
          label: '$id',
-         url: '/splats/$id.$ext',
+         source: { kind: 'public', path: 'splats/$id.$stored_ext' },
        },
 
   2. Visit it locally at http://localhost:5173/#/$id (pnpm dev).
-  3. git add public/splats/$id.$ext src/splats/registry.ts && commit.
+  3. git add public/splats/$id.$stored_ext src/splats/registry.ts && commit.
 EOF
