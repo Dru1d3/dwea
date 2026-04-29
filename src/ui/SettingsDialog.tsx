@@ -20,18 +20,27 @@ export function SettingsDialog({ open, initialKey, onClose, onSave }: SettingsDi
     <div style={backdropStyle}>
       <dialog open style={dialogStyle} aria-labelledby="settings-title">
         <h2 id="settings-title" style={{ margin: '0 0 8px 0', fontSize: 16 }}>
-          API key
+          OpenRouter API key
         </h2>
         <p style={{ margin: '0 0 12px 0', fontSize: 13, lineHeight: 1.4, opacity: 0.8 }}>
-          Mara talks to you via the Anthropic API. Paste your own key — it stays in this browser (
-          <code>localStorage</code>) and is sent only to <code>api.anthropic.com</code>. We will
-          remove this field once we have a server-side proxy (see ADR&nbsp;0004).
+          Mara talks to you through{' '}
+          <a
+            href="https://openrouter.ai/keys"
+            target="_blank"
+            rel="noreferrer"
+            style={{ color: '#9be7ff' }}
+          >
+            OpenRouter
+          </a>{' '}
+          using a free model. Paste your own key — it stays in this browser (
+          <code>localStorage</code>) and is sent only to <code>openrouter.ai</code>. We will remove
+          this field once we have a server-side proxy (see ADR&nbsp;0005).
         </p>
         <input
           type="password"
           value={key}
           onChange={(e) => setKey(e.target.value)}
-          placeholder="sk-ant-…"
+          placeholder="sk-or-v1-…"
           style={inputStyle}
         />
         <div style={rowStyle}>

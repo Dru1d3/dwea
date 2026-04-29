@@ -3,8 +3,8 @@
  * is unavailable or full we degrade to in-memory for the current session.
  */
 
-const KEY_API = 'dwea.anthropic.key';
-const KEY_GREETING_SEED = 'dwea.anthropic.greeting-seed';
+const KEY_API = 'dwea.openrouter.key';
+const KEY_GREETING_SEED = 'dwea.openrouter.greeting-seed';
 
 function safeGet(key: string): string | null {
   try {

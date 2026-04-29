@@ -4,7 +4,7 @@ import { CameraRig } from './CameraRig.js';
 import { Environment } from './Environment.js';
 import { Hud } from './Hud.js';
 import { SplatScene } from './SplatScene.js';
-import type { SceneState } from './llm/anthropic.js';
+import type { SceneState } from './llm/openrouter.js';
 import { loadApiKey, saveApiKey } from './llm/storage.js';
 import { GroundClickPlane } from './npc/GroundClickPlane.js';
 import { Npc } from './npc/Npc.js';

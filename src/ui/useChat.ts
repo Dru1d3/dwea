@@ -1,11 +1,11 @@
-import type Anthropic from '@anthropic-ai/sdk';
 import { useCallback, useRef, useState } from 'react';
 import {
   type ChatTurn,
+  type NpcClient,
   type SceneState,
   createNpcClient,
   streamNpcReply,
-} from '../llm/anthropic.js';
+} from '../llm/openrouter.js';
 import { pickGreeting } from '../llm/personality.js';
 import { rotateGreetingSeed } from '../llm/storage.js';
 import type { ChatMessage } from './ChatPanel.js';
@@ -37,7 +37,7 @@ export function useChat(args: {
   const [lastFirstTokenMs, setLastFirstTokenMs] = useState<number | null>(null);
   const recentLatenciesRef = useRef<number[]>([]);
 
-  const clientRef = useRef<Anthropic | null>(null);
+  const clientRef = useRef<NpcClient | null>(null);
   const lastKeyRef = useRef<string>('');
   if (apiKey && apiKey !== lastKeyRef.current) {
     clientRef.current = createNpcClient(apiKey);

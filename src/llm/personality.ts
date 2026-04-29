@@ -5,8 +5,12 @@
 
 export const NPC_NAME = 'Mara';
 
-// Centralized so swapping (Haiku ↔ Sonnet) is a one-line change.
-export const NPC_MODEL = 'claude-haiku-4-5-20251001';
+// Centralized so swapping models is a one-line change. We default to a free
+// OpenRouter model. `:free` tier picks based on (a) availability across
+// providers we tested, (b) tolerance of a system prompt, (c) compatibility
+// with reasoning-suppression so first-token latency reflects visible content.
+// Trade-up to a paid model only if quality demands it.
+export const NPC_MODEL = 'openai/gpt-oss-120b:free';
 
 export const MAX_HISTORY_TURNS = 6;
 export const MAX_OUTPUT_TOKENS = 256;

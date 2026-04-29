@@ -1,9 +1,9 @@
 # 0005 — First agentic NPC and LLM loop
 
-- Status: accepted
+- Status: accepted (with 2026-04-29 provider swap — see "Provider swap" below)
 - Date: 2026-04-29
 - Owner: Founding Engineer (acting CTO)
-- Issue: DWEA-5
+- Issue: DWEA-5 (provider swap requested on DWEA-3)
 - Builds on: [0001-stack.md](0001-stack.md), [0002-splat-renderer.md](0002-splat-renderer.md)
 
 ## Context
@@ -155,3 +155,78 @@ changing the call sites.
 - Add a small background presence sound (separate ticket).
 - Procedural openers (Mara reacts to time of day, weather, etc.) once
   the scene has those signals.
+
+## Provider swap — 2026-04-29
+
+Mara now talks via **OpenRouter** instead of Anthropic direct, defaulting
+to a free model (`openai/gpt-oss-120b:free`). Board asked for this on
+DWEA-3 to avoid paid Anthropic spend during the playtest phase.
+
+### What changed
+
+- `src/llm/openrouter.ts` replaces `src/llm/anthropic.ts`. Same exported
+  surface (`createNpcClient`, `streamNpcReply`, `ChatTurn`, `SceneState`,
+  `StreamHandlers`) so `useChat.ts` and `App.tsx` only changed import
+  paths and one type alias.
+- `@anthropic-ai/sdk` removed from `package.json`. The new client is a
+  plain `fetch` against `https://openrouter.ai/api/v1/chat/completions`
+  with manual SSE parsing (~80 lines). Net bundle effect: SDK removed
+  vs. ~80 lines of fetch handler.
+- localStorage keys renamed from `dwea.anthropic.*` to
+  `dwea.openrouter.*`. No migration: the old keys held an `sk-ant-…`
+  string that has no meaning on OpenRouter, so existing users will hit
+  the settings dialog once and paste a fresh `sk-or-v1-…` key.
+- Settings dialog copy + placeholder updated to reference OpenRouter.
+- `NPC_MODEL` in `personality.ts` is the only model knob; swap there to
+  try a different free model.
+
+### Why `openai/gpt-oss-120b:free` (and not the other free models)
+
+We probed eight `:free` models with the board's key. Most were
+rate-limited upstream by Venice or returned no endpoints at all
+(`deepseek-chat-v3.1:free`, `gemini-2.0-flash-exp:free`,
+`mistral-small-3.2-24b-instruct:free` — 404 on `/chat/completions`).
+Working candidates today:
+
+- **`openai/gpt-oss-120b:free` (chosen).** Available, accepts a system
+  prompt, gives a clean one-line reply, and supports
+  `reasoning: { exclude: true }` so its chain-of-thought does not
+  stream into the chat bubble.
+- `openai/gpt-oss-20b:free` — also works; smaller and noisier reasoning.
+  Fine fallback if 120b is busy. Same provider, same surface.
+- `meta-llama/llama-3.3-70b-instruct:free` — preferred on quality but
+  was rate-limited upstream during evaluation. Re-promote when stable.
+- `google/gemma-3-12b-it:free` — rejects system prompts ("Developer
+  instruction is not …"). Would require restructuring all prompts. Not
+  worth it for the swap.
+
+This pick is reversible — `personality.ts:NPC_MODEL` is the one knob.
+
+### Two stream-shape gotchas this introduced
+
+1. **Reasoning tokens are noise.** gpt-oss models stream a `reasoning`
+   delta separately from the `content` delta. The fetch handler in
+   `openrouter.ts` only honors `delta.content`; we additionally pass
+   `reasoning: { exclude: true, effort: 'low' }` in the request body so
+   OpenRouter suppresses the upstream chain-of-thought entirely. Without
+   this, first-token latency is dominated by reasoning tokens that the
+   user never sees.
+2. **`provider: { sort: "throughput" }`** is set so OpenRouter routes to
+   whichever upstream is fastest right now. Free models are
+   multi-tenant; this avoids being stuck on a slow provider.
+
+### Why not server-side proxy yet
+
+Same reason as before. We still have no edge runtime. The
+"browser-direct → edge proxy" plan from the original ADR is unchanged;
+swapping the provider does not change that dependency. The factory
+boundary still hides the provider, so the proxy path is the same
+single-call-site change it was before.
+
+### Security note
+
+The OpenRouter key the board pasted into the DWEA-3 thread is now
+visible in our issue history. We treat it as compromised on principle
+even though it has worked correctly: when DWEA-3 closes again, the
+board should rotate that key at <https://openrouter.ai/keys>. The
+production answer is the proxy + a server-side key — same as before.
