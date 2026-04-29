@@ -1,4 +1,4 @@
-# 0004 — First agentic NPC and LLM loop
+# 0005 — First agentic NPC and LLM loop
 
 - Status: accepted
 - Date: 2026-04-29
