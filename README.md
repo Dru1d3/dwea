@@ -17,17 +17,42 @@ pnpm preview      # serves the built dist/ on http://localhost:4173
 pnpm check        # typecheck + lint + test + build (the CI gate)
 ```
 
-The dev page renders a single gaussian splat scene (`nike.splat` from
-Hugging Face) on a full-bleed canvas, with orbit camera controls so the
-viewer can drag, zoom, and pan around it. See
-[`docs/decisions/0002-splat-renderer.md`](docs/decisions/0002-splat-renderer.md)
+The dev page renders a gaussian splat scene on a full-bleed canvas, with
+orbit camera controls so the viewer can drag, zoom, and pan around it. The
+active scene comes from a typed registry; the URL hash picks which one. See
+[`docs/decisions/0002-splat-renderer.md`](docs/decisions/0002-splat-renderer.md),
+[`docs/decisions/0003-asset-pipeline.md`](docs/decisions/0003-asset-pipeline.md),
 and [`docs/decisions/0004-camera-controls.md`](docs/decisions/0004-camera-controls.md).
+
+### Scenes
+
+- `#/nike` — the original drei sample (`nike.splat`, fetched from Hugging Face).
+- `#/plush` — first asset added through the local pipeline (`public/splats/plush.splat`).
+
+The top-left switcher in the deployed app toggles between them.
 
 ### Controls
 
 - **Drag** (mouse / one-finger touch) — orbit around the splat.
 - **Scroll / pinch** — zoom in and out.
 - **Right-drag / two-finger drag** — pan.
+
+## Adding a new splat
+
+```sh
+scripts/add-splat.sh <id> <source-url-or-path>
+# e.g. scripts/add-splat.sh livingroom https://example.com/livingroom.splat
+# or   scripts/add-splat.sh livingroom ./captures/livingroom.splat
+```
+
+The script copies the asset into `public/splats/<id>.<ext>`, sanity-checks
+the size, prints a sha256 + a registry stub. Paste the stub into
+`src/splats/registry.ts`, commit `public/splats/<id>.<ext>` plus the
+registry change, and the new scene is reachable at `<base>/#/<id>`.
+
+Storage rationale (when `public/` is the right home, when to migrate to a
+CDN/bucket) lives in
+[`docs/decisions/0003-asset-pipeline.md`](docs/decisions/0003-asset-pipeline.md).
 
 ## Layout
 
