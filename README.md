@@ -18,18 +18,29 @@ pnpm check        # typecheck + lint + test + build (the CI gate)
 ```
 
 The dev page renders a single gaussian splat scene (`nike.splat` from
-Hugging Face) on a full-bleed canvas. See
-[`docs/decisions/0002-splat-renderer.md`](docs/decisions/0002-splat-renderer.md).
+Hugging Face) on a full-bleed canvas, with orbit camera controls so the
+viewer can drag, zoom, and pan around it. See
+[`docs/decisions/0002-splat-renderer.md`](docs/decisions/0002-splat-renderer.md)
+and [`docs/decisions/0004-camera-controls.md`](docs/decisions/0004-camera-controls.md).
+
+### Controls
+
+- **Drag** (mouse / one-finger touch) — orbit around the splat.
+- **Scroll / pinch** — zoom in and out.
+- **Right-drag / two-finger drag** — pan.
 
 ## Layout
 
-- `src/` — app source. Entry: `src/main.tsx` → `src/App.tsx` →
-  `src/SplatScene.tsx`.
+- `src/` — app source. Entry: `src/main.tsx` → `src/App.tsx`. The canvas
+  composes `SplatScene` (the splat), `Environment` (lights + ground grid),
+  and `CameraRig` (orbit controls). `Hud` is a DOM overlay with the input
+  legend.
 - `index.html` — Vite entry.
 - `docs/decisions/` — architecture decision records. Start with
   [`0001-stack.md`](docs/decisions/0001-stack.md).
-- `.github/workflows/ci.yml` — single CI workflow.
-- `vercel.json` — static SPA config for Vercel deploys.
+- `.github/workflows/ci.yml` — CI gate.
+- `.github/workflows/deploy-pages.yml` — GitHub Pages deploy (current host).
+- `vercel.json` — static SPA config for Vercel deploys (when wired).
 
 ## Toolchain
 
