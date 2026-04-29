@@ -12,6 +12,7 @@ import { useNpcState } from './npc/state.js';
 import {
   defaultSplatId,
   findSplat,
+  resolveGroundFit,
   resolveNavigation,
   resolveSplatUrl,
   resolveTransform,
@@ -55,6 +56,7 @@ export function App() {
   const src = resolveSplatUrl(asset, import.meta.env.BASE_URL);
   const transform = resolveTransform(asset);
   const navigation = resolveNavigation(asset);
+  const fit = resolveGroundFit(asset);
 
   const npc = useNpcState({
     initialPosition: navigation.npcSpawn,
@@ -98,7 +100,15 @@ export function App() {
         <fog attach="fog" args={['#cfe2f3', 60, 280]} />
         <Environment groundY={navigation.groundY} />
         <Suspense fallback={null}>
-          <SplatScene src={src} transform={transform} />
+          {fit ? (
+            <SplatScene
+              src={src}
+              transform={transform}
+              groundFit={{ groundY: navigation.groundY, percentile: fit.percentile }}
+            />
+          ) : (
+            <SplatScene src={src} transform={transform} />
+          )}
         </Suspense>
         <Npc
           position={npc.position}

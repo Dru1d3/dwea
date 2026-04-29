@@ -5,6 +5,18 @@ export type SplatAsset = {
   readonly credit?: string;
   readonly transform?: SplatTransform;
   readonly navigation?: SplatNavigation;
+  readonly groundFit?: SplatGroundFit;
+};
+
+/**
+ * Per-scene ground auto-alignment config. When set, `<SplatScene>` reads the
+ * splat's own Y distribution and shifts the group so the lower percentile of
+ * rendered Y lands at `navigation.groundY`. The Y component of
+ * `transform.position` is ignored when `groundFit` is enabled.
+ */
+export type SplatGroundFit = {
+  /** Percentile of rendered Y to anchor at the ground. Default 1. */
+  readonly percentile?: number;
 };
 
 export type SplatSource =
@@ -76,12 +88,14 @@ export const splatRegistry: readonly SplatAsset[] = [
       'cakewalk/splat-data on Hugging Face — Mip-NeRF 360 "garden" scene (Barron et al., 2022). Research/demo use.',
     transform: {
       // Mip-NeRF 360 captures are roughly metric. Render at 1:1 scale.
-      // Splat origin sits well above the captured ground; nudge down so
-      // the table-top reads near our world ground (Y=0).
+      // Y is owned by groundFit; X/Z stay zero (scene origin is roughly centred).
       scale: 1,
-      position: [0, -1.2, 0],
+      position: [0, 0, 0],
       rotation: [0, 0, 0],
     },
+    // Ground auto-fits to the lower percentile of rendered Y. Outdoor capture
+    // has stragglers under the floor, so lift to the 2nd percentile.
+    groundFit: { percentile: 2 },
     navigation: {
       groundY: 0,
       npcSpawn: { x: 0, z: 1.5 },
@@ -100,9 +114,10 @@ export const splatRegistry: readonly SplatAsset[] = [
       'cakewalk/splat-data on Hugging Face — Mip-NeRF 360 "treehill" scene (Barron et al., 2022). Research/demo use.',
     transform: {
       scale: 1,
-      position: [0, -1.2, 0],
+      position: [0, 0, 0],
       rotation: [0, 0, 0],
     },
+    groundFit: { percentile: 2 },
     navigation: {
       groundY: 0,
       npcSpawn: { x: 0, z: 1.5 },
@@ -119,12 +134,14 @@ export const splatRegistry: readonly SplatAsset[] = [
     },
     credit: 'cakewalk/splat-data on Hugging Face — drei <Splat> canonical demo asset.',
     transform: {
-      // Object-scale capture; bump it up and lift it off the ground a bit
-      // so it reads as a "sculpture" sitting in the open world.
+      // Object-scale capture; bump it up so the shoe reads as a "sculpture".
+      // Y is owned by groundFit (sits the shoe sole on the grid).
       scale: 1.5,
-      position: [0, 0.6, 0],
+      position: [0, 0, 0],
       rotation: [0, 0, 0],
     },
+    // Tight object capture: very few outliers below the sole, so anchor at p0.5.
+    groundFit: { percentile: 0.5 },
     navigation: {
       groundY: 0,
       npcSpawn: { x: -1.5, z: 1.5 },
@@ -140,9 +157,10 @@ export const splatRegistry: readonly SplatAsset[] = [
       'cakewalk/splat-data on Hugging Face — derived from the 3D Gaussian Splatting paper test scenes. Research/demo use; replace before commercial deployment.',
     transform: {
       scale: 1.5,
-      position: [0, 0.4, 0],
+      position: [0, 0, 0],
       rotation: [0, 0, 0],
     },
+    groundFit: { percentile: 0.5 },
     navigation: {
       groundY: 0,
       npcSpawn: { x: -1.2, z: 1.2 },
@@ -173,6 +191,11 @@ export function resolveTransform(asset: SplatAsset): Required<SplatTransform> {
     position: t.position ?? DEFAULT_TRANSFORM.position,
     rotation: t.rotation ?? DEFAULT_TRANSFORM.rotation,
   };
+}
+
+export function resolveGroundFit(asset: SplatAsset): { readonly percentile: number } | null {
+  if (!asset.groundFit) return null;
+  return { percentile: asset.groundFit.percentile ?? 1 };
 }
 
 export function resolveNavigation(asset: SplatAsset): Required<SplatNavigation> {

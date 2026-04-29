@@ -63,10 +63,27 @@ expects ground to be.
 
 ### Per-scene navigation tuning
 
-`groundY` defaults to `0`. Where a splat's captured ground is offset from
-its own origin (e.g. Mip-NeRF 360 garden), the registry's `transform.position`
-nudges the splat down by the right amount, _not_ the world ground. That keeps
-all gameplay (clicks, wander, NPC bob, spawn) in a clean Y=0 frame.
+`groundY` defaults to `0`. Per-asset Y nudges (`transform.position[1]`) are
+**not** the right knob — every splat capture has its own arbitrary origin
+relative to the captured floor, and eyeballed offsets drifted noticeably
+between scenes.
+
+### Ground auto-fit
+
+Every cakewalk asset opts into `groundFit: { percentile }`. On load,
+`<SplatScene>` fetches the `.splat` file in parallel (browser HTTP cache
+de-dups against drei's own load), reads the Y component of each row,
+inverts to drei's rendered local Y (`-file_y`), sorts, and shifts the
+group so the lower-percentile rendered Y lands at `groundY`. Outdoor
+captures use `percentile: 2` to skip stragglers; tight object captures
+(`nike`, `plush`) use `0.5`. The Y component of `transform.position`
+stays at `0` and is owned by the fit. X/Z and scale/rotation still come
+from `transform`.
+
+This means new cakewalk assets need zero Y tuning — just declare the
+asset and `groundFit` and the floor lines up with the metric grid.
+Marble and other formats keep their own per-format rotation but can
+opt into the same fit.
 
 ## Consequences
 
@@ -83,9 +100,6 @@ all gameplay (clicks, wander, NPC bob, spawn) in a clean Y=0 frame.
 
 ## Open items
 
-- **Scene-specific Y-nudge.** Garden / Treehill currently use
-  `position: [0, -1.2, 0]`. Eyeball-tuned; will revisit per-scene once we
-  capture an in-house splat with a known ground plane.
 - **Eye-height locomotion.** Today's camera is still orbit-only. A first-
   person walk mode (with collision against the splat ground) is a separate
   follow-up — call it "DWEA-12 candidate".
@@ -93,3 +107,7 @@ all gameplay (clicks, wander, NPC bob, spawn) in a clean Y=0 frame.
   `[Math.PI, 0, 0]`) is recorded on this ADR's "per-format rotation" rule.
   When Marble assets actually land, confirm against the captured world and
   amend if wrong.
+- **Auto-fit tuning.** The lower-percentile heuristic is correct for
+  garden/treehill/nike/plush. If a future asset has unusual splat
+  density (e.g. dense ceiling, sparse floor) we may need a per-asset
+  fixed-Y override or a different statistic (median minus N std-devs).
