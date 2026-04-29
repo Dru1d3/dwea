@@ -1,6 +1,6 @@
 # 0002 — Splat renderer and first deploy target
 
-- Status: accepted
+- Status: accepted (renderer); deploy section amended on 2026-04-29 — see "Deploy target update" below
 - Date: 2026-04-29
 - Owner: Founding Engineer (acting CTO)
 - Issue: DWEA-3
@@ -163,3 +163,45 @@ comment on DWEA-3 and tracked from there.
 - Camera controls and a navigable environment (DWEA-4).
 - Dynamic agentic NPCs in the same scene (DWEA-5).
 - Owned asset pipeline (capture → `.ksplat`) — not yet scheduled.
+
+## Deploy target update — 2026-04-29
+
+The Vercel decision above is **deferred, not abandoned**. We did not have
+Vercel credentials available when DWEA-3 needed to ship a public URL, and
+the board greenlit a pivot to GitHub Pages to avoid another credential
+roundtrip. So the **first** deploy is GitHub Pages; Vercel becomes the
+target the moment a board user clicks "Import Project" on the GitHub repo
+in the Vercel dashboard.
+
+What changed:
+
+- **Active deploy target:** GitHub Pages (`https://<owner>.github.io/<repo>/`),
+  driven by `.github/workflows/deploy-pages.yml` (build with
+  `VITE_BASE_PATH=/<repo>/`, `actions/upload-pages-artifact` →
+  `actions/deploy-pages`). A `404.html` is copied from `index.html` so any
+  future client-side route still hits our SPA shell.
+- **Vite base path:** `vite.config.ts` reads `VITE_BASE_PATH` (defaults to
+  `/`). Local dev keeps `/`; the Pages workflow injects `/<repo>/`. Vercel
+  builds (when wired) keep the default `/`.
+- **`vercel.json` retained.** No changes; the moment Vercel is connected,
+  the repo is already configured (Vite preset, `pnpm build`, `dist/`,
+  SPA rewrite). This is the cheapest possible "ready when you are."
+
+What did **not** change:
+
+- Renderer choice (drei `<Splat>`), sample asset, perf budget and fallback
+  ladder, and every "why we did not pick X" decision in the renderer
+  section above. None of that depends on the host.
+
+Why GH Pages is the right interim host (and not the right long-term one):
+
+- Pros now: no extra account or token; native CI; URL is stable; cost is
+  zero.
+- Cons (why we still want Vercel for the long term): no per-PR preview
+  URLs, no edge functions when we add an LLM proxy / signed asset URLs,
+  build-cache story is weaker than Vercel's, and the Pages domain is
+  cosmetically less production-feeling than a custom Vercel domain.
+
+Reversal cost is small. Switching to Vercel is "import the repo + delete
+the `deploy-pages.yml` workflow + remove the `VITE_BASE_PATH` injection."
+We will revisit when Vercel access lands.
