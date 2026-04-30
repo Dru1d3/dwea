@@ -4,6 +4,7 @@ import { CameraRig } from './CameraRig.js';
 import { Environment } from './Environment.js';
 import { Hud } from './Hud.js';
 import { SplatScene } from './SplatScene.js';
+import { loadMotorApiKey, saveMotorApiKey } from './character/storage.js';
 import type { SceneState } from './llm/openrouter.js';
 import { loadApiKey, saveApiKey } from './llm/storage.js';
 import { GroundClickPlane } from './npc/GroundClickPlane.js';
@@ -18,6 +19,8 @@ import {
   splatRegistry,
 } from './splats/registry.js';
 import { ChatPanel } from './ui/ChatPanel.js';
+import { MotorChat } from './ui/MotorChat.js';
+import { MotorSettingsDialog } from './ui/MotorSettingsDialog.js';
 import { SettingsDialog } from './ui/SettingsDialog.js';
 import { useChat } from './ui/useChat.js';
 
@@ -42,6 +45,11 @@ function useHashSceneId(): string {
   }, []);
 
   return id;
+}
+
+function isMotorModeEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  return new URLSearchParams(window.location.search).has('motor');
 }
 
 export function App() {
@@ -81,6 +89,19 @@ export function App() {
     setApiKey(next);
   }, []);
 
+  // T3 motor (DWEA-18): opt-in via ?motor=1. Replaces the OpenRouter
+  // ChatPanel with the tool-call MotorChat. Lives behind a flag until
+  // T2 (DWEA-17) lands the real intent surface so we can take it default.
+  const motorMode = isMotorModeEnabled();
+  const [motorApiKey, setMotorApiKey] = useState<string>(() => loadMotorApiKey());
+  const [motorSettingsOpen, setMotorSettingsOpen] = useState<boolean>(
+    () => motorMode && loadMotorApiKey() === '',
+  );
+  const handleMotorKeySave = useCallback((next: string) => {
+    saveMotorApiKey(next);
+    setMotorApiKey(next);
+  }, []);
+
   return (
     <>
       <Canvas
@@ -111,21 +132,38 @@ export function App() {
       </Canvas>
       <Hud />
       <SceneSwitcher currentId={asset.id} />
-      <ChatPanel
-        messages={chat.messages}
-        onSend={chat.send}
-        onOpenSettings={() => setSettingsOpen(true)}
-        lastFirstTokenMs={chat.lastFirstTokenMs}
-        averageFirstTokenMs={chat.averageFirstTokenMs}
-        hasApiKey={apiKey.length > 0}
-        busy={chat.busy}
-      />
-      <SettingsDialog
-        open={settingsOpen}
-        initialKey={apiKey}
-        onClose={() => setSettingsOpen(false)}
-        onSave={handleApiKeySave}
-      />
+      {motorMode ? (
+        <>
+          <MotorChat
+            hasApiKey={motorApiKey.length > 0}
+            onOpenSettings={() => setMotorSettingsOpen(true)}
+          />
+          <MotorSettingsDialog
+            open={motorSettingsOpen}
+            initialKey={motorApiKey}
+            onClose={() => setMotorSettingsOpen(false)}
+            onSave={handleMotorKeySave}
+          />
+        </>
+      ) : (
+        <>
+          <ChatPanel
+            messages={chat.messages}
+            onSend={chat.send}
+            onOpenSettings={() => setSettingsOpen(true)}
+            lastFirstTokenMs={chat.lastFirstTokenMs}
+            averageFirstTokenMs={chat.averageFirstTokenMs}
+            hasApiKey={apiKey.length > 0}
+            busy={chat.busy}
+          />
+          <SettingsDialog
+            open={settingsOpen}
+            initialKey={apiKey}
+            onClose={() => setSettingsOpen(false)}
+            onSave={handleApiKeySave}
+          />
+        </>
+      )}
     </>
   );
 }
