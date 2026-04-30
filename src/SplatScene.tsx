@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { fitGround } from './splats/fitGround.js';
 import type { SplatTransform } from './splats/registry.js';
 import { DEFAULT_TRANSFORM } from './splats/registry.js';
+import type { Tuning } from './splats/tuningStore.js';
 
 export type SplatGroundFit = {
   /** Target ground Y in world space (metres). Default 0. */
@@ -20,27 +21,46 @@ export type SplatSceneProps = {
    * fit owns Y. X/Z and scale/rotation still apply.
    */
   readonly groundFit?: SplatGroundFit;
+  /**
+   * User-supplied scene tuning override (from the in-page `<SceneTuner>`).
+   * When provided, the override fully replaces the registry transform AND
+   * bypasses auto-fit so the user can dial in absolute values.
+   */
+  readonly tuning?: Tuning;
 };
 
-export function SplatScene({ src, transform, groundFit }: SplatSceneProps) {
+export function SplatScene({ src, transform, groundFit, tuning }: SplatSceneProps) {
   const t = transform ?? {};
-  const scale = t.scale ?? DEFAULT_TRANSFORM.scale;
-  const rotation = t.rotation ?? DEFAULT_TRANSFORM.rotation;
-  const manualPosition = t.position ?? DEFAULT_TRANSFORM.position;
+  const baseScale = t.scale ?? DEFAULT_TRANSFORM.scale;
+  const baseRotation = t.rotation ?? DEFAULT_TRANSFORM.rotation;
+  const baseManualPosition = t.position ?? DEFAULT_TRANSFORM.position;
+
+  const tuned = tuning != null;
+  const fitEnabled = !tuned && groundFit !== undefined;
 
   const fitGroundY = groundFit?.groundY ?? 0;
   const fitPercentile = groundFit?.percentile ?? 1;
-  const fittedY = useFittedGroundY(groundFit ? src : null, fitGroundY, fitPercentile, scale);
+  const fittedY = useFittedGroundY(fitEnabled ? src : null, fitGroundY, fitPercentile, baseScale);
 
-  // Auto-fit owns Y when enabled. While the fit is in flight (`fittedY` is
-  // null) we render at world ground; a brief sub-second pop is preferable to
-  // showing the splat at a clearly-wrong hardcoded offset.
-  const positionY = groundFit ? (fittedY ?? fitGroundY) : manualPosition[1];
-
-  const position: [number, number, number] = [manualPosition[0], positionY, manualPosition[2]];
+  let position: [number, number, number];
+  let rotation: [number, number, number];
+  let scale: number;
+  if (tuned) {
+    position = [tuning.position[0], tuning.position[1], tuning.position[2]];
+    rotation = [tuning.rotation[0], tuning.rotation[1], tuning.rotation[2]];
+    scale = tuning.scale;
+  } else {
+    // Auto-fit owns Y when enabled. While the fit is in flight (`fittedY` is
+    // null) we render at world ground; a brief sub-second pop is preferable
+    // to showing the splat at a clearly-wrong hardcoded offset.
+    const positionY = fitEnabled ? (fittedY ?? fitGroundY) : baseManualPosition[1];
+    position = [baseManualPosition[0], positionY, baseManualPosition[2]];
+    rotation = [baseRotation[0], baseRotation[1], baseRotation[2]];
+    scale = baseScale;
+  }
 
   return (
-    <group position={position} rotation={rotation as [number, number, number]} scale={scale}>
+    <group position={position} rotation={rotation} scale={scale}>
       <Splat key={src} src={src} />
     </group>
   );

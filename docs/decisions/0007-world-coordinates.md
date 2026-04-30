@@ -68,6 +68,23 @@ expects ground to be.
 relative to the captured floor, and eyeballed offsets drifted noticeably
 between scenes.
 
+### In-page scene tuner
+
+Some captures (e.g. Mip-NeRF 360 garden) are not gravity-aligned in their
+own frame — auto-fit can put the cloud at the right Y but the floor is
+still tilted relative to the metric grid. The agent has no browser, so
+blind iteration on rotation values wastes review cycles.
+
+`?tune=1` enables `<SceneTuner>`, a compact HUD with sliders for
+position (XYZ), rotation (XYZ), and scale. While the tuner is
+"override"-active for a scene, the registry transform AND auto-fit are
+both bypassed; the user owns absolute values. Values persist per asset
+in `localStorage` (`dwea.tuning.v1.<assetId>`). A "copy" button emits a
+`transform: { ... }` literal that can be pasted back into the registry
+to bake the values in.
+
+Reset button restores registry + auto-fit defaults.
+
 ### Ground auto-fit
 
 Every cakewalk asset opts into `groundFit: { percentile }`. On load,
