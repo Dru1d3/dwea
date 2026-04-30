@@ -20,6 +20,7 @@ export function Hud() {
     >
       <strong style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>Move around</strong>
       Drag to orbit · Scroll to zoom · Right-drag (or two fingers) to pan
+      <div style={{ marginTop: 6, opacity: 0.85 }}>Hold Space (or 🎤) to talk to Mara.</div>
     </div>
   );
 }
