@@ -1,9 +1,13 @@
-import { Canvas } from '@react-three/fiber';
-import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { KeyboardControls } from '@react-three/drei';
+import { Canvas, useThree } from '@react-three/fiber';
+import { Physics, RigidBody } from '@react-three/rapier';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CameraRig } from './CameraRig.js';
 import { Environment } from './Environment.js';
 import { Hud } from './Hud.js';
 import { SplatScene } from './SplatScene.js';
+import { Character, type CharacterRef } from './character/Character.js';
+import { createCharacterIntent } from './character/intent.js';
 import type { SceneState } from './llm/openrouter.js';
 import { loadApiKey, saveApiKey } from './llm/storage.js';
 import { GroundClickPlane } from './npc/GroundClickPlane.js';
@@ -27,6 +31,27 @@ import { useChat } from './ui/useChat.js';
 
 // Eye height ~1.7 m, set back ~10 m, slightly above to read as 'standing in a world'.
 const cameraInitialPosition: [number, number, number] = [6, 2.4, 10];
+
+/**
+ * WASD + jump key map for `<KeyboardControls>`. Names match Ecctrl's
+ * defaults — see `useKeyboardControls` calls in `node_modules/ecctrl`.
+ */
+const KEYBOARD_MAP = [
+  { name: 'forward', keys: ['ArrowUp', 'KeyW'] },
+  { name: 'backward', keys: ['ArrowDown', 'KeyS'] },
+  { name: 'leftward', keys: ['ArrowLeft', 'KeyA'] },
+  { name: 'rightward', keys: ['ArrowRight', 'KeyD'] },
+  { name: 'jump', keys: ['Space'] },
+  { name: 'run', keys: ['Shift'] },
+  { name: 'action1', keys: ['1', 'KeyQ'] },
+  { name: 'action2', keys: ['2'] },
+  { name: 'action3', keys: ['3'] },
+  { name: 'action4', keys: ['4'] },
+] as const;
+
+/** Square half-extent (m) for the static ground collider. Comfortably wider
+ *  than every splat scene we've shipped so the character never falls off. */
+const GROUND_HALF_EXTENT = 200;
 
 function isTuneModeEnabled(): boolean {
   if (typeof window === 'undefined') return false;
@@ -102,45 +127,78 @@ export function App() {
     setApiKey(next);
   }, []);
 
+  // T2 — character + physics rig. The ref is read by the intent surface so
+  // T3 can dispatch tool calls into it from anywhere outside R3F's render
+  // tree. Spawn slightly inside the splat scene with a touch of clearance
+  // above the floor so the floating-capsule controller settles cleanly.
+  const characterRef = useRef<CharacterRef>(null);
+  const characterSpawn = useMemo<[number, number, number]>(
+    () => [1.4, navigation.groundY + 1.0, 1.6],
+    [navigation.groundY],
+  );
+
   return (
     <>
-      <Canvas
-        style={{ position: 'fixed', inset: 0, width: '100vw', height: '100vh' }}
-        dpr={[1, 2]}
-        gl={{ antialias: true, powerPreference: 'high-performance' }}
-        camera={{ position: cameraInitialPosition, fov: 60, near: 0.1, far: 1000 }}
-      >
-        {/* Pale-sky background; the analytic <Sky> draws over this for views
-            above the horizon, this colour shows below for grazing angles. */}
-        <color attach="background" args={['#cfe2f3']} />
-        {/* Soft atmospheric depth — very gentle, kicks in past 60 m so the
-            world does not feel boxed-in. */}
-        <fog attach="fog" args={['#cfe2f3', 60, 280]} />
-        <Environment groundY={navigation.groundY} />
-        <Suspense fallback={null}>
-          <SplatSceneSlot
-            src={src}
-            transform={transform}
-            groundFit={
-              fit ? { groundY: navigation.groundY, percentile: fit.percentile } : undefined
-            }
-            tuning={tuning}
+      <KeyboardControls map={KEYBOARD_MAP as unknown as { name: string; keys: string[] }[]}>
+        <Canvas
+          style={{ position: 'fixed', inset: 0, width: '100vw', height: '100vh' }}
+          dpr={[1, 2]}
+          gl={{ antialias: true, powerPreference: 'high-performance' }}
+          camera={{ position: cameraInitialPosition, fov: 60, near: 0.1, far: 1000 }}
+        >
+          {/* Pale-sky background; the analytic <Sky> draws over this for views
+              above the horizon, this colour shows below for grazing angles. */}
+          <color attach="background" args={['#cfe2f3']} />
+          {/* Soft atmospheric depth — very gentle, kicks in past 60 m so the
+              world does not feel boxed-in. */}
+          <fog attach="fog" args={['#cfe2f3', 60, 280]} />
+          <Environment groundY={navigation.groundY} />
+          <Suspense fallback={null}>
+            <SplatSceneSlot
+              src={src}
+              transform={transform}
+              groundFit={
+                fit ? { groundY: navigation.groundY, percentile: fit.percentile } : undefined
+              }
+              tuning={tuning}
+            />
+          </Suspense>
+          {/* Rapier physics live under <Suspense> so the WASM init kicks in
+              after first paint without blocking the splat scene. */}
+          <Suspense fallback={null}>
+            <Physics gravity={[0, -9.81, 0]} timeStep={1 / 60}>
+              {/* Static ground collider matching the splat scene's floor.
+                  Cuboid is cheap and infinite-grid-flat, which is what
+                  every shipping splat scene uses today. */}
+              <RigidBody type="fixed" colliders="cuboid" friction={1} restitution={0}>
+                <mesh
+                  position={[0, navigation.groundY - 0.05, 0]}
+                  rotation={[0, 0, 0]}
+                  visible={false}
+                >
+                  <boxGeometry args={[GROUND_HALF_EXTENT * 2, 0.1, GROUND_HALF_EXTENT * 2]} />
+                  <meshBasicMaterial color="#000" />
+                </mesh>
+              </RigidBody>
+              <Character ref={characterRef} initialPosition={characterSpawn} />
+            </Physics>
+          </Suspense>
+          <Npc
+            position={npc.position}
+            target={npc.target}
+            groundY={navigation.groundY}
+            onPositionChange={npc.setPosition}
+            onTargetReached={npc.clearTarget}
           />
-        </Suspense>
-        <Npc
-          position={npc.position}
-          target={npc.target}
-          groundY={navigation.groundY}
-          onPositionChange={npc.setPosition}
-          onTargetReached={npc.clearTarget}
-        />
-        <GroundClickPlane
-          groundY={navigation.groundY}
-          radius={navigation.clickRadius}
-          onPick={(p) => npc.setTarget(p, { fromUserClick: true })}
-        />
-        <CameraRig />
-      </Canvas>
+          <GroundClickPlane
+            groundY={navigation.groundY}
+            radius={navigation.clickRadius}
+            onPick={(p) => npc.setTarget(p, { fromUserClick: true })}
+          />
+          <CameraRig />
+          <CharacterIntentBridge characterRef={characterRef} />
+        </Canvas>
+      </KeyboardControls>
       <Hud />
       <SceneSwitcher currentId={asset.id} />
       {tuneMode ? (
@@ -192,6 +250,41 @@ function SplatSceneSlot({ src, transform, groundFit, tuning }: SplatSceneSlotPro
     return <SplatScene src={src} transform={transform} groundFit={groundFit} />;
   }
   return <SplatScene src={src} transform={transform} />;
+}
+
+/**
+ * Lives inside <Canvas> so it can read R3F state (active camera). On mount,
+ * binds a `window.dwea` console handle exposing the same intent surface
+ * T3 will import — that satisfies the four browser-console acceptance
+ * checks for DWEA-17 (lookAt / pointAt / playAnimation / moveTo).
+ */
+function CharacterIntentBridge({
+  characterRef,
+}: { readonly characterRef: { readonly current: CharacterRef | null } }) {
+  const camera = useThree((s) => s.camera);
+
+  useEffect(() => {
+    const intent = createCharacterIntent(characterRef, {
+      resolveCamera: () => camera,
+    });
+    const win = globalThis as unknown as { dwea?: unknown };
+    win.dwea = {
+      moveTo: intent.move_to,
+      lookAt: intent.look_at,
+      pointAt: intent.point_at,
+      playAnimation: intent.play_animation,
+      speak: intent.speak,
+      dispatch: intent.dispatch,
+      lookAtCamera: () => intent.look_at('camera'),
+      character: characterRef,
+    };
+    return () => {
+      const w = globalThis as unknown as { dwea?: unknown };
+      w.dwea = undefined;
+    };
+  }, [camera, characterRef]);
+
+  return null;
 }
 
 function SceneSwitcher({ currentId }: { currentId: string }) {
