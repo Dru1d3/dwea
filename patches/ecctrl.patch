@@ -1,0 +1,17 @@
+diff --git a/dist/Ecctrl.d.ts b/dist/Ecctrl.d.ts
+index 69a3dacf30e71e891d293358c567e2d1e4d45978..19e09d63eb800fcd53ef31b54d57cdf1446119e8 100644
+--- a/dist/Ecctrl.d.ts
++++ b/dist/Ecctrl.d.ts
+@@ -4,7 +4,11 @@ import React from "react";
+ export { EcctrlAnimation } from "./EcctrlAnimation";
+ export { useFollowCam } from "./hooks/useFollowCam";
+ export { useGame } from "./stores/useGame";
+-export { EcctrlJoystick } from "../src/EcctrlJoystick";
++// Patched out by DWEA-17: upstream re-exports from ../src/EcctrlJoystick.tsx
++// which trips strict typecheck (TS2322 / TS18047 in 2018-era code). We don't
++// use the joystick UI in the splat app — it's mobile-only — so dropping the
++// re-export removes the bad cross-module reference cleanly.
++// export { EcctrlJoystick } from "../src/EcctrlJoystick";
+ export { useJoystickControls } from "./stores/useJoystickControls";
+ declare const _default: React.ForwardRefExoticComponent<EcctrlProps & React.RefAttributes<CustomEcctrlRigidBody>>;
+ export default _default;
