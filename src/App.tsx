@@ -20,6 +20,8 @@ import {
 import { ChatPanel } from './ui/ChatPanel.js';
 import { SettingsDialog } from './ui/SettingsDialog.js';
 import { useChat } from './ui/useChat.js';
+import { useMicCapture } from './ui/useMicCapture.js';
+import { usePushToTalkHotkey } from './ui/usePushToTalkHotkey.js';
 
 const cameraInitialPosition: [number, number, number] = [2.4, 1.2, 4];
 
@@ -76,6 +78,22 @@ export function App() {
 
   const chat = useChat({ apiKey, getScene });
 
+  // Most-recent send fn so the mic hook's stable callback always dispatches
+  // through the latest chat instance (busy / history changes don't break it).
+  const sendRef = useRef(chat.send);
+  sendRef.current = chat.send;
+  const handleTranscript = useCallback((text: string) => {
+    sendRef.current(text);
+  }, []);
+  const mic = useMicCapture({ onTranscript: handleTranscript });
+
+  const canTalk = apiKey.length > 0 && !chat.busy;
+  usePushToTalkHotkey({
+    enabled: canTalk && mic.supported,
+    onPress: () => mic.start(),
+    onRelease: () => mic.stop(),
+  });
+
   const handleApiKeySave = useCallback((next: string) => {
     saveApiKey(next);
     setApiKey(next);
@@ -119,6 +137,7 @@ export function App() {
         averageFirstTokenMs={chat.averageFirstTokenMs}
         hasApiKey={apiKey.length > 0}
         busy={chat.busy}
+        mic={mic}
       />
       <SettingsDialog
         open={settingsOpen}
