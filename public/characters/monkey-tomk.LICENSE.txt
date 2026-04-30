@@ -1,0 +1,48 @@
+monkey-tomk.glb
+================
+
+Source asset
+------------
+- Title: "Monkey 3D model. Rigged. FBX."
+- Author: tomk
+- Source: https://opengameart.org/content/monkey-3d-model-rigged-fbx
+- License: CC0 1.0 Universal (Public Domain Dedication)
+  https://creativecommons.org/publicdomain/zero/1.0/
+- Original archive: Monkey_animated.zip (10.4 MB) — binary FBX + 7 PNG textures
+- Last verified: 2026-04-30
+
+What ships in this GLB
+----------------------
+- Mesh: 17,037 vertices, 5,679 triangles, 4 baseColorTextures
+- Skin: 34 joints (full humanoid + 7 tail bones — b_Tail01..b_Tail07)
+- Animation: 1 clip, original FBX name "Take 001", renamed to "Dance" during
+  asset bake. 2 s duration, 121 keyframes, 39 animated bones.
+
+Local re-bake recipe (not committed; reproducible from the OGA download)
+------------------------------------------------------------------------
+1. Fetch source archive:
+     curl -L -o /tmp/Monkey_animated.zip \
+       https://opengameart.org/sites/default/files/Monkey_animated.zip
+2. Unzip to /tmp/monkey_oga (FBX + PNG textures).
+3. Convert FBX → GLB with assimpjs (a WASM port of Open Asset Import Library):
+     npm install --no-save assimpjs
+     # see scripts/bake-monkey-tomk.cjs in this repo for the exact node script
+4. Embed external image URIs into the GLB binary chunk and rename the single
+   "Take 001" animation clip → "Dance" (registry contract). Same script.
+
+The choice of "Dance" as the clip name is documented in ADR 0009. Originally
+the FBX exported a single anonymous "Take 001" track; we relabel it because the
+registry, the LLM motor's `play_animation` tool (DWEA-18), and the dance-button
+acceptance on DWEA-22 all key on canonical clip ids. The motion itself is a
+2-second hip-bob loop that reads as a stylized dance even without the original
+animator's intent confirmed.
+
+CC0 means no attribution is legally required, but we list "tomk / OpenGameArt"
+in the registry's `credit` field for the same reason we credit the splat
+authors — it's right and it helps future maintainers find the source.
+
+Why not commit the original FBX
+-------------------------------
+The repo only ships the runtime artifact (the GLB), the same way ADR 0003 and
+ADR 0006 carry splat/character bytes. The source FBX, textures, and the bake
+script live next to ADR 0009; rebuild them from the OGA archive when needed.
