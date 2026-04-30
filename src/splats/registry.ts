@@ -86,16 +86,15 @@ export const splatRegistry: readonly SplatAsset[] = [
     },
     credit:
       'cakewalk/splat-data on Hugging Face — Mip-NeRF 360 "garden" scene (Barron et al., 2022). Research/demo use.',
+    // Hand-tuned via in-page tuner; the COLMAP capture isn't gravity-aligned
+    // so auto-fit alone can't level the floor — it needs a real rotation.
+    // Auto-fit is intentionally absent here (presence of `transform` with a
+    // non-zero rotation supersedes any auto-fit).
     transform: {
-      // Mip-NeRF 360 captures are roughly metric. Render at 1:1 scale.
-      // Y is owned by groundFit; X/Z stay zero (scene origin is roughly centred).
       scale: 1,
-      position: [0, 0, 0],
-      rotation: [0, 0, 0],
+      position: [1.65, 3.35, 1.55],
+      rotation: [-0.5266, 0.0584, 0.0584],
     },
-    // Ground auto-fits to the lower percentile of rendered Y. Outdoor capture
-    // has stragglers under the floor, so lift to the 2nd percentile.
-    groundFit: { percentile: 2 },
     navigation: {
       groundY: 0,
       npcSpawn: { x: 0, z: 1.5 },

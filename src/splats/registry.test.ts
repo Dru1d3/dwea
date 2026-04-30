@@ -17,13 +17,6 @@ describe('splat registry conventions (ADR 0007)', () => {
     expect(DEFAULT_NAVIGATION.groundY).toBe(0);
   });
 
-  it('every cakewalk asset opts into identity rotation (no Y-flip)', () => {
-    for (const asset of splatRegistry) {
-      const t = resolveTransform(asset);
-      expect(t.rotation, `asset ${asset.id} unexpectedly applies a rotation`).toEqual([0, 0, 0]);
-    }
-  });
-
   it('every asset places its ground at Y=0', () => {
     for (const asset of splatRegistry) {
       const n = resolveNavigation(asset);
@@ -31,19 +24,38 @@ describe('splat registry conventions (ADR 0007)', () => {
     }
   });
 
-  it('every asset opts into auto ground-fit so we do not eyeball Y per scene', () => {
+  it('every asset is either auto-fit or hand-tuned (never both, never neither)', () => {
     for (const asset of splatRegistry) {
       const fit = resolveGroundFit(asset);
-      expect(fit, `asset ${asset.id} should enable groundFit`).not.toBeNull();
-      expect(fit?.percentile).toBeGreaterThanOrEqual(0);
-      expect(fit?.percentile).toBeLessThan(50);
-    }
-  });
-
-  it('auto-fit owns Y; transform.position.y stays at 0 so it cannot conflict', () => {
-    for (const asset of splatRegistry) {
       const t = resolveTransform(asset);
-      expect(t.position[1], `asset ${asset.id} should not pre-bake a Y offset`).toBe(0);
+      const hasTunedTransform =
+        t.position[0] !== 0 ||
+        t.position[1] !== 0 ||
+        t.position[2] !== 0 ||
+        t.rotation[0] !== 0 ||
+        t.rotation[1] !== 0 ||
+        t.rotation[2] !== 0;
+
+      if (fit !== null) {
+        // Auto-fit assets must keep transform.position[1] at 0 so the fit
+        // can't conflict, AND must keep identity rotation (cakewalk format
+        // renders Y-up after drei's Y-flip; any rotation applied here is a
+        // signal of hand-tuning).
+        expect(t.position[1], `auto-fit asset ${asset.id} pre-bakes a Y offset`).toBe(0);
+        expect(t.rotation, `auto-fit asset ${asset.id} should keep identity rotation`).toEqual([
+          0, 0, 0,
+        ]);
+        expect(fit.percentile).toBeGreaterThanOrEqual(0);
+        expect(fit.percentile).toBeLessThan(50);
+      } else {
+        // Hand-tuned: transform must be non-trivial. If it were identity,
+        // the asset would render at the file's raw origin with no fit —
+        // almost certainly wrong.
+        expect(
+          hasTunedTransform,
+          `asset ${asset.id} has neither groundFit nor a hand-tuned transform`,
+        ).toBe(true);
+      }
     }
   });
 });
