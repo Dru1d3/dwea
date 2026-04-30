@@ -111,12 +111,13 @@ export const splatRegistry: readonly SplatAsset[] = [
     },
     credit:
       'cakewalk/splat-data on Hugging Face — Mip-NeRF 360 "treehill" scene (Barron et al., 2022). Research/demo use.',
+    // Board confirmed the same gravity-correction works across all four
+    // cakewalk captures; values mirror garden.
     transform: {
       scale: 1,
-      position: [0, 0, 0],
-      rotation: [0, 0, 0],
+      position: [1.65, 3.35, 1.55],
+      rotation: [-0.5266, 0.0584, 0.0584],
     },
-    groundFit: { percentile: 2 },
     navigation: {
       groundY: 0,
       npcSpawn: { x: 0, z: 1.5 },
@@ -133,14 +134,10 @@ export const splatRegistry: readonly SplatAsset[] = [
     },
     credit: 'cakewalk/splat-data on Hugging Face — drei <Splat> canonical demo asset.',
     transform: {
-      // Object-scale capture; bump it up so the shoe reads as a "sculpture".
-      // Y is owned by groundFit (sits the shoe sole on the grid).
-      scale: 1.5,
-      position: [0, 0, 0],
-      rotation: [0, 0, 0],
+      scale: 1,
+      position: [1.65, 3.35, 1.55],
+      rotation: [-0.5266, 0.0584, 0.0584],
     },
-    // Tight object capture: very few outliers below the sole, so anchor at p0.5.
-    groundFit: { percentile: 0.5 },
     navigation: {
       groundY: 0,
       npcSpawn: { x: -1.5, z: 1.5 },
@@ -155,11 +152,10 @@ export const splatRegistry: readonly SplatAsset[] = [
     credit:
       'cakewalk/splat-data on Hugging Face — derived from the 3D Gaussian Splatting paper test scenes. Research/demo use; replace before commercial deployment.',
     transform: {
-      scale: 1.5,
-      position: [0, 0, 0],
-      rotation: [0, 0, 0],
+      scale: 1,
+      position: [1.65, 3.35, 1.55],
+      rotation: [-0.5266, 0.0584, 0.0584],
     },
-    groundFit: { percentile: 0.5 },
     navigation: {
       groundY: 0,
       npcSpawn: { x: -1.2, z: 1.2 },

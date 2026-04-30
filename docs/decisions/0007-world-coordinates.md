@@ -85,22 +85,31 @@ to bake the values in.
 
 Reset button restores registry + auto-fit defaults.
 
-### Ground auto-fit
+### Ground auto-fit (still supported, currently unused)
 
-Every cakewalk asset opts into `groundFit: { percentile }`. On load,
-`<SplatScene>` fetches the `.splat` file in parallel (browser HTTP cache
-de-dups against drei's own load), reads the Y component of each row,
-inverts to drei's rendered local Y (`-file_y`), sorts, and shifts the
-group so the lower-percentile rendered Y lands at `groundY`. Outdoor
-captures use `percentile: 2` to skip stragglers; tight object captures
-(`nike`, `plush`) use `0.5`. The Y component of `transform.position`
-stays at `0` and is owned by the fit. X/Z and scale/rotation still come
-from `transform`.
+Auto-fit is implemented in `src/splats/fitGround.ts` and exposed via
+`groundFit: { percentile }` on a `SplatAsset`. On load, `<SplatScene>`
+fetches the `.splat` file in parallel (browser HTTP cache de-dups
+against drei's own load), reads the Y component of each row, inverts
+to drei's rendered local Y (`-file_y`), sorts, and shifts the group so
+the lower-percentile rendered Y lands at `groundY`.
 
-This means new cakewalk assets need zero Y tuning — just declare the
-asset and `groundFit` and the floor lines up with the metric grid.
-Marble and other formats keep their own per-format rotation but can
-opt into the same fit.
+In practice the cakewalk captures we ship are not gravity-aligned in
+their own COLMAP frame, so a Y-only correction couldn't level the
+floor. All four shipped scenes are hand-tuned via `<SplatScene>`
+(rotation `[-0.5266, 0.0584, 0.0584]` + position `[1.65, 3.35, 1.55]`)
+which the board confirmed is the universal correction for these
+cakewalk antimatter15-format assets.
+
+Auto-fit remains the right answer for **already-gravity-aligned**
+captures (e.g. anything we'll capture in-house with a level reference,
+or a Marble export that bakes orientation correctly). Future assets
+opt in via `groundFit`; misaligned captures stay hand-tuned.
+
+The asset invariant — pinned by `registry.test.ts` — is that an asset
+is **either** auto-fit (`groundFit` set, `transform` identity) **or**
+hand-tuned (`groundFit` absent, `transform` non-trivial). Never both,
+never neither.
 
 ## Consequences
 
