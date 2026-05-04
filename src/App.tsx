@@ -10,18 +10,28 @@ import { GroundClickPlane } from './npc/GroundClickPlane.js';
 import { Npc } from './npc/Npc.js';
 import { useNpcState } from './npc/state.js';
 import {
+  type SplatTransform,
   defaultSplatId,
   findSplat,
+  resolveGroundFit,
   resolveNavigation,
   resolveSplatUrl,
   resolveTransform,
   splatRegistry,
 } from './splats/registry.js';
+import { type Tuning, loadTuning } from './splats/tuningStore.js';
 import { ChatPanel } from './ui/ChatPanel.js';
+import { SceneTuner } from './ui/SceneTuner.js';
 import { SettingsDialog } from './ui/SettingsDialog.js';
 import { useChat } from './ui/useChat.js';
 
-const cameraInitialPosition: [number, number, number] = [2.4, 1.2, 4];
+// Eye height ~1.7 m, set back ~10 m, slightly above to read as 'standing in a world'.
+const cameraInitialPosition: [number, number, number] = [6, 2.4, 10];
+
+function isTuneModeEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  return new URLSearchParams(window.location.search).has('tune');
+}
 
 function readSceneIdFromHash(): string {
   const raw = window.location.hash.replace(/^#\/?/, '').trim();
@@ -54,6 +64,17 @@ export function App() {
   const src = resolveSplatUrl(asset, import.meta.env.BASE_URL);
   const transform = resolveTransform(asset);
   const navigation = resolveNavigation(asset);
+  const fit = resolveGroundFit(asset);
+
+  const tuneMode = isTuneModeEnabled();
+  const [tuning, setTuning] = useState<Tuning | null>(() =>
+    tuneMode ? loadTuning(asset.id) : null,
+  );
+  // Re-read tuning whenever the active scene changes — each scene has its own
+  // saved override.
+  useEffect(() => {
+    setTuning(tuneMode ? loadTuning(asset.id) : null);
+  }, [tuneMode, asset.id]);
 
   const npc = useNpcState({
     initialPosition: navigation.npcSpawn,
@@ -86,14 +107,25 @@ export function App() {
       <Canvas
         style={{ position: 'fixed', inset: 0, width: '100vw', height: '100vh' }}
         dpr={[1, 2]}
-        gl={{ antialias: false, powerPreference: 'high-performance' }}
-        camera={{ position: cameraInitialPosition, fov: 50, near: 0.1, far: 100 }}
+        gl={{ antialias: true, powerPreference: 'high-performance' }}
+        camera={{ position: cameraInitialPosition, fov: 60, near: 0.1, far: 1000 }}
       >
-        <color attach="background" args={['#05060a']} />
-        <fog attach="fog" args={['#05060a', 18, 36]} />
+        {/* Pale-sky background; the analytic <Sky> draws over this for views
+            above the horizon, this colour shows below for grazing angles. */}
+        <color attach="background" args={['#cfe2f3']} />
+        {/* Soft atmospheric depth — very gentle, kicks in past 60 m so the
+            world does not feel boxed-in. */}
+        <fog attach="fog" args={['#cfe2f3', 60, 280]} />
         <Environment groundY={navigation.groundY} />
         <Suspense fallback={null}>
-          <SplatScene src={src} transform={transform} />
+          <SplatSceneSlot
+            src={src}
+            transform={transform}
+            groundFit={
+              fit ? { groundY: navigation.groundY, percentile: fit.percentile } : undefined
+            }
+            tuning={tuning}
+          />
         </Suspense>
         <Npc
           position={npc.position}
@@ -111,6 +143,18 @@ export function App() {
       </Canvas>
       <Hud />
       <SceneSwitcher currentId={asset.id} />
+      {tuneMode ? (
+        <SceneTuner
+          assetId={asset.id}
+          value={tuning}
+          defaults={{
+            position: [transform.position[0], transform.position[1], transform.position[2]],
+            rotation: [transform.rotation[0], transform.rotation[1], transform.rotation[2]],
+            scale: transform.scale,
+          }}
+          onChange={setTuning}
+        />
+      ) : null}
       <ChatPanel
         messages={chat.messages}
         onSend={chat.send}
@@ -128,6 +172,26 @@ export function App() {
       />
     </>
   );
+}
+
+type SplatSceneSlotProps = {
+  readonly src: string;
+  readonly transform: Required<SplatTransform>;
+  readonly groundFit: { readonly groundY: number; readonly percentile: number } | undefined;
+  readonly tuning: Tuning | null;
+};
+
+function SplatSceneSlot({ src, transform, groundFit, tuning }: SplatSceneSlotProps) {
+  if (tuning && groundFit) {
+    return <SplatScene src={src} transform={transform} groundFit={groundFit} tuning={tuning} />;
+  }
+  if (tuning) {
+    return <SplatScene src={src} transform={transform} tuning={tuning} />;
+  }
+  if (groundFit) {
+    return <SplatScene src={src} transform={transform} groundFit={groundFit} />;
+  }
+  return <SplatScene src={src} transform={transform} />;
 }
 
 function SceneSwitcher({ currentId }: { currentId: string }) {
