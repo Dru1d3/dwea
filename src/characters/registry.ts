@@ -43,6 +43,15 @@ export type CharacterClip = {
 
 export const characterRegistry: readonly CharacterAsset[] = [
   {
+    id: 'monkey-tomk',
+    label: 'Monkey (tomk)',
+    source: { kind: 'public', path: 'characters/monkey-tomk.glb' },
+    credit:
+      'Monkey 3D model by tomk. CC0 1.0 Universal (public domain). Sourced from OpenGameArt (https://opengameart.org/content/monkey-3d-model-rigged-fbx). FBX→GLB bake via assimpjs; original "Take 001" clip relabeled as Dance — see ADR 0009 and public/characters/monkey-tomk.LICENSE.txt.',
+    clips: [{ id: 'Dance', label: 'Dance', kind: 'oneshot', loop: true }],
+    defaultClipId: 'Dance',
+  },
+  {
     id: 'robot-expressive',
     label: 'Robot (Expressive)',
     source: { kind: 'public', path: 'characters/robot-expressive.glb' },
@@ -68,7 +77,16 @@ export const characterRegistry: readonly CharacterAsset[] = [
   },
 ] as const;
 
-export const defaultCharacterId: CharacterAsset['id'] = 'robot-expressive';
+/**
+ * The active default. T6 (DWEA-24) flipped this from `robot-expressive` to
+ * `monkey-tomk` because the board explicitly requested a dancing monkey on
+ * DWEA-22. Robot stays in the registry as a fallback — its rich gesture
+ * library (Wave / Yes / No / Sitting / …) is still useful for tests and for
+ * any scene that wants the wider clip set while the monkey carries only the
+ * Dance clip in its v1 bake. See ADR 0009 for the asset choice and the
+ * single-animation caveat.
+ */
+export const defaultCharacterId: CharacterAsset['id'] = 'monkey-tomk';
 
 export function findCharacter(id: string): CharacterAsset | undefined {
   return characterRegistry.find((c) => c.id === id);
