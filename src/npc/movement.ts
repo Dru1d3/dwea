@@ -4,11 +4,11 @@ export const NPC_WALK_SPEED = 1.5; // world units per second
 export const NPC_TARGET_REACHED_EPSILON = 0.05;
 export const NPC_BOB_AMPLITUDE = 0.08;
 export const NPC_BOB_FREQUENCY = 1.4; // hz
-// Mara floats ~0.6 above the scene's ground plane. The default ground sits at
-// -1.6 (matches the synthetic grid in Environment.tsx); per-scene overrides
-// come from the splat registry's `navigation.groundY`.
-export const SCENE_GROUND_Y = -1.6;
-export const NPC_FLOAT_OFFSET = 0.6;
+// World convention: 1 unit = 1 m, ground plane at Y=0 (see ADR 0007).
+// Mara is a floating spirit-NPC that hovers ~0.8 m off the ground; per-scene
+// overrides still come from the splat registry's `navigation.groundY`.
+export const SCENE_GROUND_Y = 0;
+export const NPC_FLOAT_OFFSET = 0.8;
 export const NPC_BASE_HEIGHT = SCENE_GROUND_Y + NPC_FLOAT_OFFSET;
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { idleBob, randomWanderTarget, stepTowardTarget } from './movement.js';
+import { NPC_BASE_HEIGHT, idleBob, randomWanderTarget, stepTowardTarget } from './movement.js';
 
 describe('stepTowardTarget', () => {
   it('returns the same position when no target is set', () => {
@@ -35,10 +35,9 @@ describe('idleBob', () => {
     const max = Math.max(...samples);
     // Amplitude check: peak-to-peak ≥ 0.1, well below the bob amplitude bound.
     expect(max - min).toBeGreaterThan(0.1);
-    // Mara stays close to the configured base height (currently -1.0).
-    const baseExpected = -1.0;
-    expect(min).toBeGreaterThan(baseExpected - 0.2);
-    expect(max).toBeLessThan(baseExpected + 0.2);
+    // Mara stays close to the configured base height (NPC_BASE_HEIGHT).
+    expect(min).toBeGreaterThan(NPC_BASE_HEIGHT - 0.2);
+    expect(max).toBeLessThan(NPC_BASE_HEIGHT + 0.2);
   });
 });
 

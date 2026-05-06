@@ -13,7 +13,7 @@ export interface GroundClickPlaneProps {
   radius?: number;
 }
 
-export function GroundClickPlane({ onPick, groundY = -1.6, radius = 6 }: GroundClickPlaneProps) {
+export function GroundClickPlane({ onPick, groundY = 0, radius = 12 }: GroundClickPlaneProps) {
   const handle = (event: ThreeEvent<MouseEvent>) => {
     event.stopPropagation();
     onPick({ x: event.point.x, z: event.point.z });
