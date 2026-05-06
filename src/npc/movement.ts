@@ -71,6 +71,23 @@ export function pickNpcClip(target: Vec2 | null, reached: boolean): NpcClip {
 }
 
 /**
+ * Yaw (radians, around world Y) the NPC needs so its rig front faces the
+ * target. Soldier.glb's chest +Z points to world -Z at rest — i.e. the model's
+ * visual front is along world -Z. We compute the angle that takes the front
+ * vector (-Z) onto the (target - current) direction.
+ *
+ * Returns null when there's no movement direction (no target, or target is
+ * the current position) so callers can preserve the previous facing.
+ */
+export function npcFacingYaw(from: Vec2, to: Vec2): number | null {
+  const dx = to.x - from.x;
+  const dz = to.z - from.z;
+  if (dx === 0 && dz === 0) return null;
+  // atan2(-dx, -dz) maps the desired direction onto the model's -Z front.
+  return Math.atan2(-dx, -dz);
+}
+
+/**
  * Pick a small random wander target around an anchor. Keeps Mara on-screen.
  */
 export function randomWanderTarget(anchor: Vec2, radius = 1.5): Vec2 {
