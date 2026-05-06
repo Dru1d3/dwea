@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { NPC_NAME } from '../llm/personality.js';
+import { MicButton } from './MicButton.js';
+import type { MicCaptureApi } from './useMicCapture.js';
 
 export interface ChatMessage {
   id: string;
@@ -18,6 +20,8 @@ export interface ChatPanelProps {
   averageFirstTokenMs: number | null;
   hasApiKey: boolean;
   busy: boolean;
+  /** Optional mic capture; if omitted, the mic affordance is hidden. */
+  mic?: MicCaptureApi;
 }
 
 export function ChatPanel(props: ChatPanelProps) {
@@ -29,6 +33,7 @@ export function ChatPanel(props: ChatPanelProps) {
     averageFirstTokenMs,
     hasApiKey,
     busy,
+    mic,
   } = props;
   const [draft, setDraft] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -87,6 +92,10 @@ export function ChatPanel(props: ChatPanelProps) {
         )}
       </div>
 
+      {mic?.errorMessage && mic.errorKind !== 'no-speech' ? (
+        <div style={micErrorStyle}>{mic.errorMessage}</div>
+      ) : null}
+
       <form
         style={formStyle}
         onSubmit={(e) => {
@@ -94,11 +103,18 @@ export function ChatPanel(props: ChatPanelProps) {
           submit();
         }}
       >
+        {mic ? <MicButton mic={mic} disabled={!hasApiKey || busy} /> : null}
         <input
           type="text"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder={hasApiKey ? `Talk to ${NPC_NAME}…` : 'Add an API key to talk'}
+          placeholder={
+            hasApiKey
+              ? mic?.state === 'listening'
+                ? 'Listening…'
+                : `Talk to ${NPC_NAME}…`
+              : 'Add an API key to talk'
+          }
           disabled={!hasApiKey || busy}
           style={inputStyle}
         />
@@ -233,4 +249,15 @@ const sendBtnStyle: React.CSSProperties = {
   padding: '8px 12px',
   fontWeight: 600,
   cursor: 'pointer',
+};
+
+const micErrorStyle: React.CSSProperties = {
+  margin: '0 12px 6px',
+  padding: '6px 8px',
+  borderRadius: 6,
+  background: 'rgba(255, 90, 110, 0.12)',
+  border: '1px solid rgba(255, 90, 110, 0.35)',
+  color: '#ffb0bd',
+  fontSize: 11,
+  lineHeight: 1.35,
 };
