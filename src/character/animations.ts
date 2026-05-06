@@ -1,15 +1,18 @@
 import { AnimationClip, NumberKeyframeTrack, QuaternionKeyframeTrack } from 'three';
+import { type HumanoidBoneNames, STUB_BONE_NAMES } from './humanoid.js';
 
 /**
- * Hand-rolled `AnimationClip`s for the stub humanoid. T1's GLB ships its own
- * Mixamo/ActorCore clips and replaces these wholesale; until then we drive
- * the AnimationMixer with cheap keyframe tracks so cross-fade semantics are
- * exercisable end-to-end (acceptance criterion 4).
+ * Hand-rolled `AnimationClip`s used as the universal fallback set. The clips
+ * survive the swap from `StubHumanoid` to the real GLB rig because every
+ * track name is built through `boneNames[abstractBone]` — pass
+ * `MIXAMO_BONE_NAMES` and the same clips drive a Mixamo skeleton.
  *
- * Tracks reference bone names by `boneName.property[xyz]`. The bones are
- * registered as `Object3D.name` in `StubHumanoid`, so PropertyBinding picks
- * them up automatically when we plug a clip into a mixer rooted at the
- * humanoid root group.
+ * The GLB's bundled clips override these by name on the `Character` mixer
+ * (see `Character.tsx`); these stay around for clips the GLB lacks (jump,
+ * fall, wave) and as the only set the StubHumanoid sees.
+ *
+ * Track names are addressed as `boneName.property[xyz]`; PropertyBinding
+ * resolves them against `Object3D.name` once the mixer's root is mounted.
  */
 
 /**
@@ -66,59 +69,75 @@ function bobY(
 /**
  * Idle: gentle vertical bob on the pelvis. Everyone else stays neutral.
  */
-export function buildIdleClip(): AnimationClip {
+export function buildIdleClip(names: HumanoidBoneNames = STUB_BONE_NAMES): AnimationClip {
   const duration = 2.0;
-  return new AnimationClip('idle', duration, [bobY('pelvis', 0.04, duration)]);
+  return new AnimationClip('idle', duration, [bobY(names.pelvis, 0.04, duration)]);
 }
 
 /**
  * Walk: contralateral leg + arm swing. Bones rotate around their local X.
  */
-export function buildWalkClip(): AnimationClip {
+export function buildWalkClip(names: HumanoidBoneNames = STUB_BONE_NAMES): AnimationClip {
   const duration = 0.9;
   return new AnimationClip('walk', duration, [
-    bobY('pelvis', 0.05, duration),
-    quatSwingX('rHip', 0.6, duration),
-    quatSwingX('lHip', -0.6, duration),
-    quatSwingX('rKnee', 0.4, duration),
-    quatSwingX('lKnee', -0.4, duration),
-    quatSwingX('rShoulder', -0.5, duration),
-    quatSwingX('lShoulder', 0.5, duration),
-    quatSwingX('rElbow', 0.25, duration),
-    quatSwingX('lElbow', -0.25, duration),
+    bobY(names.pelvis, 0.05, duration),
+    quatSwingX(names.rHip, 0.6, duration),
+    quatSwingX(names.lHip, -0.6, duration),
+    quatSwingX(names.rKnee, 0.4, duration),
+    quatSwingX(names.lKnee, -0.4, duration),
+    quatSwingX(names.rShoulder, -0.5, duration),
+    quatSwingX(names.lShoulder, 0.5, duration),
+    quatSwingX(names.rElbow, 0.25, duration),
+    quatSwingX(names.lElbow, -0.25, duration),
   ]);
 }
 
 /**
  * Run: same shape as walk but bigger amplitude and faster loop.
  */
-export function buildRunClip(): AnimationClip {
+export function buildRunClip(names: HumanoidBoneNames = STUB_BONE_NAMES): AnimationClip {
   const duration = 0.55;
   return new AnimationClip('run', duration, [
-    bobY('pelvis', 0.09, duration),
-    quatSwingX('rHip', 0.95, duration),
-    quatSwingX('lHip', -0.95, duration),
-    quatSwingX('rKnee', 0.7, duration),
-    quatSwingX('lKnee', -0.7, duration),
-    quatSwingX('rShoulder', -0.85, duration),
-    quatSwingX('lShoulder', 0.85, duration),
-    quatSwingX('rElbow', 0.5, duration),
-    quatSwingX('lElbow', -0.5, duration),
+    bobY(names.pelvis, 0.09, duration),
+    quatSwingX(names.rHip, 0.95, duration),
+    quatSwingX(names.lHip, -0.95, duration),
+    quatSwingX(names.rKnee, 0.7, duration),
+    quatSwingX(names.lKnee, -0.7, duration),
+    quatSwingX(names.rShoulder, -0.85, duration),
+    quatSwingX(names.lShoulder, 0.85, duration),
+    quatSwingX(names.rElbow, 0.5, duration),
+    quatSwingX(names.lElbow, -0.5, duration),
   ]);
 }
 
 /**
  * Jump: a single half-cycle pose that briefly tucks the legs.
  */
-export function buildJumpClip(): AnimationClip {
+export function buildJumpClip(names: HumanoidBoneNames = STUB_BONE_NAMES): AnimationClip {
   const duration = 0.5;
   const a = Math.sin(0.55 / 2);
   const c = Math.cos(0.55 / 2);
   return new AnimationClip('jump', duration, [
-    new QuaternionKeyframeTrack('rHip.quaternion', [0, duration], [a, 0, 0, c, 0, 0, 0, 1]),
-    new QuaternionKeyframeTrack('lHip.quaternion', [0, duration], [a, 0, 0, c, 0, 0, 0, 1]),
-    new QuaternionKeyframeTrack('rKnee.quaternion', [0, duration], [-a * 1.5, 0, 0, c, 0, 0, 0, 1]),
-    new QuaternionKeyframeTrack('lKnee.quaternion', [0, duration], [-a * 1.5, 0, 0, c, 0, 0, 0, 1]),
+    new QuaternionKeyframeTrack(
+      `${names.rHip}.quaternion`,
+      [0, duration],
+      [a, 0, 0, c, 0, 0, 0, 1],
+    ),
+    new QuaternionKeyframeTrack(
+      `${names.lHip}.quaternion`,
+      [0, duration],
+      [a, 0, 0, c, 0, 0, 0, 1],
+    ),
+    new QuaternionKeyframeTrack(
+      `${names.rKnee}.quaternion`,
+      [0, duration],
+      [-a * 1.5, 0, 0, c, 0, 0, 0, 1],
+    ),
+    new QuaternionKeyframeTrack(
+      `${names.lKnee}.quaternion`,
+      [0, duration],
+      [-a * 1.5, 0, 0, c, 0, 0, 0, 1],
+    ),
   ]);
 }
 
@@ -126,14 +145,14 @@ export function buildJumpClip(): AnimationClip {
  * Wave: action1 — left arm overhead wave. Useful as a non-locomotion clip
  * for testing `play_animation` interrupt semantics.
  */
-export function buildWaveClip(): AnimationClip {
+export function buildWaveClip(names: HumanoidBoneNames = STUB_BONE_NAMES): AnimationClip {
   const duration = 1.2;
   // Raise arm: rotate around Z for outward, X for back-and-forth wave.
   const liftA = Math.sin(-2.1 / 2);
   const liftC = Math.cos(-2.1 / 2);
   return new AnimationClip('wave', duration, [
     new QuaternionKeyframeTrack(
-      'lShoulder.quaternion',
+      `${names.lShoulder}.quaternion`,
       [0, duration / 2, duration],
       [
         // axis Z, angle ~-2.1 rad (arm up and out)
@@ -152,7 +171,7 @@ export function buildWaveClip(): AnimationClip {
       ],
     ),
     new QuaternionKeyframeTrack(
-      'lElbow.quaternion',
+      `${names.lElbow}.quaternion`,
       [0, duration / 4, (3 * duration) / 4, duration],
       [
         Math.sin(0.35 / 2),
@@ -179,8 +198,8 @@ export function buildWaveClip(): AnimationClip {
 /**
  * Fall: same as jump pose, longer duration. Mostly for ecctrl's `fall` slot.
  */
-export function buildFallClip(): AnimationClip {
-  return new AnimationClip('fall', 0.75, [bobY('pelvis', -0.04, 0.75)]);
+export function buildFallClip(names: HumanoidBoneNames = STUB_BONE_NAMES): AnimationClip {
+  return new AnimationClip('fall', 0.75, [bobY(names.pelvis, -0.04, 0.75)]);
 }
 
 /**
@@ -204,16 +223,19 @@ export const STUB_CLIP_NAMES = Object.values(STUB_ANIMATION_SET);
 
 /**
  * Construct the full clip set in one call. Order matches what the Mixer
- * registers when the character mounts.
+ * registers when the character mounts. Pass the rig's `boneNames` to
+ * retarget the synth tracks at a real Mixamo (or other) skeleton.
  */
-export function buildStubAnimationClips(): readonly AnimationClip[] {
+export function buildStubAnimationClips(
+  names: HumanoidBoneNames = STUB_BONE_NAMES,
+): readonly AnimationClip[] {
   return [
-    buildIdleClip(),
-    buildWalkClip(),
-    buildRunClip(),
-    buildJumpClip(),
-    buildFallClip(),
-    buildWaveClip(),
+    buildIdleClip(names),
+    buildWalkClip(names),
+    buildRunClip(names),
+    buildJumpClip(names),
+    buildFallClip(names),
+    buildWaveClip(names),
   ];
 }
 

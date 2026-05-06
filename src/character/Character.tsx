@@ -1,8 +1,17 @@
 import { useFrame, useThree } from '@react-three/fiber';
 import Ecctrl from 'ecctrl';
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
+import {
+  Suspense,
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+} from 'react';
 import {
   type AnimationAction,
+  type AnimationClip,
   AnimationMixer,
   type Camera,
   LoopOnce,
@@ -10,8 +19,10 @@ import {
   type Object3D,
   type Vector3,
 } from 'three';
-import { type HumanoidHandle, StubHumanoid } from './StubHumanoid.js';
+import { GltfHumanoid } from './GltfHumanoid.js';
+import { StubHumanoid } from './StubHumanoid.js';
 import { STUB_ANIMATION_SET, buildStubAnimationClips } from './animations.js';
+import type { HumanoidHandle } from './humanoid.js';
 import { type IKControls, createIKControls } from './ik.js';
 import type { AnimationDispatchMode, ClipName } from './intent.js';
 
@@ -52,10 +63,16 @@ interface CharacterProps {
   readonly initialPosition: readonly [number, number, number];
   /** When true, Ecctrl drives a follow-cam — leave false so OrbitControls owns the camera. */
   readonly followCam?: boolean;
+  /**
+   * Visual rig: the rigged glTF (default) or the placeholder capsule
+   * humanoid. The stub fallback stays available for tests / dev mode where
+   * the loader is unavailable.
+   */
+  readonly rig?: 'gltf' | 'stub';
 }
 
 export const Character = forwardRef<CharacterRef, CharacterProps>(function Character(
-  { initialPosition, followCam = false },
+  { initialPosition, followCam = false, rig = 'gltf' },
   ref,
 ) {
   const ecctrlRef = useRef<unknown>(null);
@@ -87,14 +104,26 @@ export const Character = forwardRef<CharacterRef, CharacterProps>(function Chara
 
     const mixer = new AnimationMixer(humanoid.root);
     const actions = new Map<string, AnimationAction>();
-    for (const clip of buildStubAnimationClips()) {
+
+    // Synth fallback first; bundled clips (idle/walk/run on the GLB) override
+    // them by name so the demo gets real Mixamo motion where available and
+    // hand-rolled keyframe loops everywhere else (jump / fall / wave).
+    const clipsByName = new Map<string, AnimationClip>();
+    for (const clip of buildStubAnimationClips(humanoid.boneNames)) {
+      clipsByName.set(clip.name, clip);
+    }
+    for (const clip of humanoid.clips ?? []) {
+      clipsByName.set(clip.name, clip);
+    }
+
+    for (const [name, clip] of clipsByName) {
       const action = mixer.clipAction(clip);
       action.setLoop(
-        clip.name === 'jump' || clip.name === 'wave' ? LoopOnce : LoopRepeat,
+        name === 'jump' || name === 'wave' ? LoopOnce : LoopRepeat,
         Number.POSITIVE_INFINITY,
       );
-      action.clampWhenFinished = clip.name === 'jump' || clip.name === 'wave';
-      actions.set(clip.name, action);
+      action.clampWhenFinished = name === 'jump' || name === 'wave';
+      actions.set(name, action);
     }
     mixerRef.current = mixer;
     actionsRef.current = actions;
@@ -219,16 +248,29 @@ export const Character = forwardRef<CharacterRef, CharacterProps>(function Chara
     [initialPosition, followCam],
   );
 
+  const humanoidCallback = useCallback(
+    (h: HumanoidHandle | null) => {
+      initRig(h);
+    },
+    [initRig],
+  );
+
   return (
     <Ecctrl {...ecctrlProps}>
       {/* Drop the humanoid origin a bit so the pelvis lines up with the
-          floating capsule's "hip" rather than its centre. */}
+          floating capsule's "hip" rather than its centre. Both rigs report
+          their root at hip-level (the GltfHumanoid applies its own internal
+          feet-to-hip offset). */}
       <group position={[0, -0.55, 0]}>
-        <StubHumanoid
-          ref={(h) => {
-            initRig(h);
-          }}
-        />
+        {rig === 'gltf' ? (
+          // GLB load is async — fall back to the stub during initial
+          // suspension so the character is visible immediately.
+          <Suspense fallback={<StubHumanoid ref={humanoidCallback} />}>
+            <GltfHumanoid ref={humanoidCallback} />
+          </Suspense>
+        ) : (
+          <StubHumanoid ref={humanoidCallback} />
+        )}
       </group>
     </Ecctrl>
   );

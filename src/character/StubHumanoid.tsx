@@ -1,35 +1,8 @@
 import { forwardRef, useImperativeHandle, useRef } from 'react';
 import type { Group, Object3D } from 'three';
+import { type HumanoidBone, type HumanoidHandle, STUB_BONE_NAMES } from './humanoid.js';
 
-/**
- * Named-bone hierarchy for the placeholder humanoid. The shape is what
- * three-ik chains and synthesised AnimationClips key off, so future swaps to
- * T1's GLB only need to expose bones with the same names.
- */
-export type HumanoidBone =
-  | 'pelvis'
-  | 'spine'
-  | 'chest'
-  | 'head'
-  | 'rShoulder'
-  | 'rElbow'
-  | 'rWrist'
-  | 'lShoulder'
-  | 'lElbow'
-  | 'lWrist'
-  | 'rHip'
-  | 'rKnee'
-  | 'rAnkle'
-  | 'lHip'
-  | 'lKnee'
-  | 'lAnkle';
-
-export interface HumanoidHandle {
-  /** Root group — what Ecctrl wraps as the visual representation. */
-  readonly root: Group;
-  /** Look up a named bone Object3D. Returns null until the tree mounts. */
-  readonly bone: (name: HumanoidBone) => Object3D | null;
-}
+export type { HumanoidBone, HumanoidHandle } from './humanoid.js';
 
 interface BoneGroupProps {
   readonly name: HumanoidBone;
@@ -110,6 +83,7 @@ export const StubHumanoid = forwardRef<HumanoidHandle>(function StubHumanoid(_, 
       bone(name) {
         return registry.get(name) ?? null;
       },
+      boneNames: STUB_BONE_NAMES,
     }),
     [registry],
   );
