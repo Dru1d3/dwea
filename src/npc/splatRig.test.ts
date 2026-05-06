@@ -14,16 +14,24 @@ import { attachSplatRendering } from './splatRig.js';
 
 function makeRiggedScene(): { root: Group; mesh: SkinnedMesh } {
   const geometry = new BufferGeometry();
-  geometry.setAttribute('position', new BufferAttribute(new Float32Array([0, 0, 0, 1, 0, 0]), 3));
-  geometry.setAttribute('normal', new BufferAttribute(new Float32Array([0, 1, 0, 0, 1, 0]), 3));
-  geometry.setAttribute('uv', new BufferAttribute(new Float32Array([0, 0, 1, 0]), 2));
+  // Three-vertex single triangle, plus the skin attributes the splat sampler
+  // and shader chunks need to read.
+  geometry.setAttribute(
+    'position',
+    new BufferAttribute(new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]), 3),
+  );
+  geometry.setAttribute(
+    'normal',
+    new BufferAttribute(new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]), 3),
+  );
+  geometry.setAttribute('uv', new BufferAttribute(new Float32Array([0, 0, 1, 0, 0, 1]), 2));
   geometry.setAttribute(
     'skinIndex',
-    new BufferAttribute(new Uint16Array([0, 0, 0, 0, 0, 0, 0, 0]), 4),
+    new BufferAttribute(new Uint16Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]), 4),
   );
   geometry.setAttribute(
     'skinWeight',
-    new BufferAttribute(new Float32Array([1, 0, 0, 0, 1, 0, 0, 0]), 4),
+    new BufferAttribute(new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]), 4),
   );
 
   const material = new MeshStandardMaterial();
@@ -46,8 +54,26 @@ describe('attachSplatRendering', () => {
     expect(mesh.visible).toBe(false);
     const points = root.children.find((c): c is Points => (c as Points).isPoints === true);
     expect(points).toBeDefined();
-    expect(points?.geometry).toBe(mesh.geometry);
     expect(points?.frustumCulled).toBe(false);
+  });
+
+  it('densely surface-samples the source geometry into many splats', () => {
+    // Source geometry has 3 vertices; the splat sampler must produce many more
+    // points so the cloud reads as a dense splat scan rather than a sparse
+    // vertex-stamp.
+    const { root, mesh } = makeRiggedScene();
+    attachSplatRendering(root);
+    const points = root.children.find((c): c is Points => (c as Points).isPoints === true);
+    if (!points) throw new Error('expected Points sibling');
+    const positionAttr = points.geometry.attributes.position;
+    const sourcePositionAttr = mesh.geometry.attributes.position;
+    if (!positionAttr || !sourcePositionAttr) throw new Error('expected position attrs');
+    const splatCount = positionAttr.count;
+    expect(splatCount).toBeGreaterThan(sourcePositionAttr.count * 100);
+    // Skinning attributes and the per-splat jitter attribute have to follow.
+    expect(points.geometry.attributes.skinIndex?.count).toBe(splatCount);
+    expect(points.geometry.attributes.skinWeight?.count).toBe(splatCount);
+    expect(points.geometry.attributes.aJitter?.count).toBe(splatCount);
   });
 
   it('flags the Points object as a SkinnedMesh so the renderer auto-binds skinning uniforms', () => {
