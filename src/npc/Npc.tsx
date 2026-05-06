@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useRef } from 'react';
 import { type AnimationAction, AnimationMixer, type Group, LoopRepeat } from 'three';
 import { SkeletonUtils } from 'three-stdlib';
 import { type NpcClip, npcFacingYaw, pickNpcClip, stepTowardTarget } from './movement.js';
-import { attachSplatRendering, refreshSplatSkeletons } from './splatRig.js';
+import { attachSplatRendering } from './splatRig.js';
 import type { Vec2 } from './types.js';
 
 const SOLDIER_URL = `${import.meta.env.BASE_URL}models/Soldier.glb`;
@@ -120,14 +120,6 @@ function RiggedNpc({ position, target, groundY = 0, onPositionChange, onTargetRe
     }
 
     animation.mixer.update(delta);
-
-    // The original SkinnedMesh is hidden in favour of the splat point cloud,
-    // so three.js's renderer no longer auto-runs Skeleton.update for us — the
-    // splat shader's bone texture has to be repacked manually each frame.
-    if (group.current) {
-      group.current.updateMatrixWorld(true);
-      refreshSplatSkeletons(group.current);
-    }
   });
 
   return (
