@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useRef } from 'react';
 import { type AnimationAction, AnimationMixer, type Group, LoopRepeat } from 'three';
 import { SkeletonUtils } from 'three-stdlib';
 import { type NpcClip, npcFacingYaw, pickNpcClip, stepTowardTarget } from './movement.js';
+import { attachSplatRendering, refreshSplatSkeletons } from './splatRig.js';
 import type { Vec2 } from './types.js';
 
 const SOLDIER_URL = `${import.meta.env.BASE_URL}models/Soldier.glb`;
@@ -45,15 +46,13 @@ function RiggedNpc({ position, target, groundY = 0, onPositionChange, onTargetRe
 
   // Per-mount clone of the GLB scene so this NPC's skeleton is independent
   // of the player Character's Soldier (drei caches the original gltf.scene).
+  // We then swap every SkinnedMesh on the clone for a sibling Points cloud
+  // with a gaussian-falloff splat shader, so Mara reads as a 3D Gaussian
+  // Splat reconstruction rather than a triangle-shaded mesh — matching the
+  // splat aesthetic of the surrounding scene.
   const scene = useMemo(() => {
     const cloned = SkeletonUtils.clone(gltf.scene);
-    cloned.traverse((obj) => {
-      const mesh = obj as { isMesh?: boolean; castShadow?: boolean; receiveShadow?: boolean };
-      if (mesh.isMesh) {
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-      }
-    });
+    attachSplatRendering(cloned);
     return cloned;
   }, [gltf.scene]);
 
@@ -121,6 +120,14 @@ function RiggedNpc({ position, target, groundY = 0, onPositionChange, onTargetRe
     }
 
     animation.mixer.update(delta);
+
+    // The original SkinnedMesh is hidden in favour of the splat point cloud,
+    // so three.js's renderer no longer auto-runs Skeleton.update for us — the
+    // splat shader's bone texture has to be repacked manually each frame.
+    if (group.current) {
+      group.current.updateMatrixWorld(true);
+      refreshSplatSkeletons(group.current);
+    }
   });
 
   return (
