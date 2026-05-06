@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { NPC_BASE_HEIGHT, idleBob, randomWanderTarget, stepTowardTarget } from './movement.js';
+import {
+  NPC_BASE_HEIGHT,
+  idleBob,
+  pickNpcClip,
+  randomWanderTarget,
+  stepTowardTarget,
+} from './movement.js';
 
 describe('stepTowardTarget', () => {
   it('returns the same position when no target is set', () => {
@@ -38,6 +44,21 @@ describe('idleBob', () => {
     // Mara stays close to the configured base height (NPC_BASE_HEIGHT).
     expect(min).toBeGreaterThan(NPC_BASE_HEIGHT - 0.2);
     expect(max).toBeLessThan(NPC_BASE_HEIGHT + 0.2);
+  });
+});
+
+describe('pickNpcClip', () => {
+  it('returns walk when there is an unreached target', () => {
+    expect(pickNpcClip({ x: 1, z: 0 }, false)).toBe('walk');
+  });
+
+  it('returns idle when there is no target', () => {
+    expect(pickNpcClip(null, false)).toBe('idle');
+    expect(pickNpcClip(null, true)).toBe('idle');
+  });
+
+  it('returns idle on the frame the target is reached', () => {
+    expect(pickNpcClip({ x: 1, z: 0 }, true)).toBe('idle');
   });
 });
 

@@ -59,6 +59,17 @@ export function idleBob(elapsedSeconds: number, baseHeight: number = NPC_BASE_HE
   );
 }
 
+export type NpcClip = 'idle' | 'walk';
+
+/**
+ * Pick the animation clip the NPC should be playing this frame. The NPC is
+ * walking only when there is a target it has not yet reached; everything else
+ * (no target, target reached, target equal to current position) is idle.
+ */
+export function pickNpcClip(target: Vec2 | null, reached: boolean): NpcClip {
+  return target && !reached ? 'walk' : 'idle';
+}
+
 /**
  * Pick a small random wander target around an anchor. Keeps Mara on-screen.
  */
