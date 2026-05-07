@@ -11,11 +11,29 @@
 
 ```sh
 pnpm install
+cp .env.example .env.local   # then paste your OpenRouter / Groq keys
 pnpm dev          # local app at http://localhost:5173
 pnpm build        # produces dist/
 pnpm preview      # serves the built dist/ on http://localhost:4173
 pnpm check        # typecheck + lint + test + build (the CI gate)
 ```
+
+## Environment
+
+`.env.example` documents every supported variable. The two that matter for
+the chat / voice loop today:
+
+| Var                   | What                                                                                       | Default             |
+|-----------------------|--------------------------------------------------------------------------------------------|---------------------|
+| `VITE_GROQ_API_KEY`   | Groq Whisper STT key. When set, push-to-talk uses Groq Whisper-large-v3-turbo (free tier). | unset → Web Speech  |
+| `VITE_STT_PROVIDER`   | `groq` or `web-speech`. Forces a provider regardless of the key.                           | auto                |
+| `VITE_STT_LANGUAGE`   | BCP-47 hint passed to Whisper, e.g. `de`. Omit for auto-detect.                            | auto-detect         |
+| `VITE_OPENROUTER_MODEL` | Override the chat model. Default is the free OSS model documented in `personality.ts`.   | `openai/gpt-oss-120b:free` |
+
+The OpenRouter API key for Mara's chat is entered through the in-app settings
+dialog (it's stored in `localStorage`, never bundled). See
+[`docs/decisions/0010-voice-mode-and-tool-calls.md`](docs/decisions/0010-voice-mode-and-tool-calls.md)
+for the cost note and provider rationale.
 
 The dev page renders a gaussian splat scene on a full-bleed canvas, with
 orbit camera controls so the viewer can drag, zoom, and pan around it. The

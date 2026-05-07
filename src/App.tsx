@@ -7,8 +7,8 @@ import { Environment } from './Environment.js';
 import { Hud } from './Hud.js';
 import { SplatScene } from './SplatScene.js';
 import { Character, type CharacterRef } from './character/Character.js';
-import { createCharacterIntent } from './character/intent.js';
-import type { SceneState } from './llm/openrouter.js';
+import { type CharacterIntentSurface, createCharacterIntent } from './character/intent.js';
+import type { SceneState } from './llm/motor.js';
 import { loadApiKey, saveApiKey } from './llm/storage.js';
 import { GroundClickPlane } from './npc/GroundClickPlane.js';
 import { Npc } from './npc/Npc.js';
@@ -27,8 +27,9 @@ import { type Tuning, loadTuning } from './splats/tuningStore.js';
 import { ChatPanel } from './ui/ChatPanel.js';
 import { SceneTuner } from './ui/SceneTuner.js';
 import { SettingsDialog } from './ui/SettingsDialog.js';
+import { resolveSttConfigFromImportMeta } from './ui/sttProvider.js';
 import { useChat } from './ui/useChat.js';
-import { useMicCapture } from './ui/useMicCapture.js';
+import { type UseMicCaptureProvider, useMicCapture } from './ui/useMicCapture.js';
 import { usePushToTalkHotkey } from './ui/usePushToTalkHotkey.js';
 
 // Eye height ~1.7 m, set back ~10 m, slightly above to read as 'standing in a world'.
@@ -122,7 +123,28 @@ export function App() {
     [],
   );
 
-  const chat = useChat({ apiKey, getScene });
+  // Shared between the in-Canvas <CharacterIntentBridge /> (which builds the
+  // intent surface against the live camera) and `useChat` (which dispatches
+  // motor tool calls into it). Lazy because the surface only exists after
+  // Character + camera have mounted.
+  const intentRef = useRef<CharacterIntentSurface | null>(null);
+  const getIntent = useCallback(() => intentRef.current, []);
+
+  // Build-time override for the OpenRouter model. Empty / unset → keep
+  // `personality.NPC_MODEL`.
+  const modelOverride = useMemo(() => {
+    // biome-ignore lint/suspicious/noExplicitAny: vite injects import.meta.env at build.
+    const meta = (import.meta as any).env as Record<string, string | undefined> | undefined;
+    const v = meta?.VITE_OPENROUTER_MODEL?.trim();
+    return v && v.length > 0 ? v : undefined;
+  }, []);
+
+  const chat = useChat({
+    apiKey,
+    getScene,
+    getIntent,
+    ...(modelOverride ? { model: modelOverride } : {}),
+  });
 
   // Most-recent send fn so the mic hook's stable callback always dispatches
   // through the latest chat instance (busy / history changes don't break it).
@@ -131,7 +153,22 @@ export function App() {
   const handleTranscript = useCallback((text: string) => {
     sendRef.current(text);
   }, []);
-  const mic = useMicCapture({ onTranscript: handleTranscript });
+  // Resolve STT provider once at app start. Groq Whisper is the default when
+  // a key is present; falls back to Web Speech API otherwise. See
+  // `sttProvider.ts` and ADR 0010.
+  const sttConfig = useMemo(() => resolveSttConfigFromImportMeta(), []);
+  const micProvider = useMemo<UseMicCaptureProvider>(() => {
+    if (sttConfig.provider === 'groq' && sttConfig.groqApiKey) {
+      const cfg: UseMicCaptureProvider = {
+        kind: 'groq',
+        apiKey: sttConfig.groqApiKey,
+      };
+      if (sttConfig.language) (cfg as { language?: string }).language = sttConfig.language;
+      return cfg;
+    }
+    return { kind: 'web-speech' };
+  }, [sttConfig]);
+  const mic = useMicCapture({ onTranscript: handleTranscript, provider: micProvider });
 
   const canTalk = apiKey.length > 0 && !chat.busy;
   usePushToTalkHotkey({
@@ -214,7 +251,7 @@ export function App() {
             onPick={(p) => npc.setTarget(p, { fromUserClick: true })}
           />
           <CameraRig />
-          <CharacterIntentBridge characterRef={characterRef} />
+          <CharacterIntentBridge characterRef={characterRef} intentRef={intentRef} />
         </Canvas>
       </KeyboardControls>
       <Hud />
@@ -279,13 +316,18 @@ function SplatSceneSlot({ src, transform, groundFit, tuning }: SplatSceneSlotPro
  */
 function CharacterIntentBridge({
   characterRef,
-}: { readonly characterRef: { readonly current: CharacterRef | null } }) {
+  intentRef,
+}: {
+  readonly characterRef: { readonly current: CharacterRef | null };
+  readonly intentRef: { current: CharacterIntentSurface | null };
+}) {
   const camera = useThree((s) => s.camera);
 
   useEffect(() => {
     const intent = createCharacterIntent(characterRef, {
       resolveCamera: () => camera,
     });
+    intentRef.current = intent;
     const win = globalThis as unknown as { dwea?: unknown };
     win.dwea = {
       moveTo: intent.move_to,
@@ -298,10 +340,11 @@ function CharacterIntentBridge({
       character: characterRef,
     };
     return () => {
+      intentRef.current = null;
       const w = globalThis as unknown as { dwea?: unknown };
       w.dwea = undefined;
     };
-  }, [camera, characterRef]);
+  }, [camera, characterRef, intentRef]);
 
   return null;
 }
