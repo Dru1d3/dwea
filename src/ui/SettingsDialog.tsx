@@ -7,14 +7,29 @@ export interface SettingsDialogProps {
   onSave: (key: string) => void;
 }
 
+// Mask all but the leading prefix and trailing 4 chars so the user can confirm
+// "yes, that's my key" without the dialog leaking the secret to a shoulder.
+function maskKey(key: string): string {
+  if (!key) return '';
+  if (key.length <= 12) return `${key.slice(0, 2)}…${key.slice(-2)}`;
+  return `${key.slice(0, 8)}…${key.slice(-4)}`;
+}
+
 export function SettingsDialog({ open, initialKey, onClose, onSave }: SettingsDialogProps) {
   const [key, setKey] = useState(initialKey);
+  const [reveal, setReveal] = useState(false);
 
   useEffect(() => {
-    if (open) setKey(initialKey);
+    if (open) {
+      setKey(initialKey);
+      setReveal(false);
+    }
   }, [open, initialKey]);
 
   if (!open) return null;
+
+  const hasSavedKey = initialKey.length > 0;
+  const matchesSaved = key === initialKey;
 
   return (
     <div style={backdropStyle}>
@@ -36,13 +51,36 @@ export function SettingsDialog({ open, initialKey, onClose, onSave }: SettingsDi
           <code>localStorage</code>) and is sent only to <code>openrouter.ai</code>. We will remove
           this field once we have a server-side proxy (see ADR&nbsp;0005).
         </p>
-        <input
-          type="password"
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-          placeholder="sk-or-v1-…"
-          style={inputStyle}
-        />
+        {hasSavedKey ? (
+          <div style={savedBannerStyle} aria-live="polite">
+            <span>
+              Last saved: <code style={savedKeyStyle}>{maskKey(initialKey)}</code>
+            </span>
+            <span style={{ opacity: 0.75 }}>
+              {matchesSaved ? 'using saved key — just press Save.' : 'edited; Save to overwrite.'}
+            </span>
+          </div>
+        ) : null}
+        <div style={inputRowStyle}>
+          <input
+            type={reveal ? 'text' : 'password'}
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            placeholder="sk-or-v1-…"
+            autoComplete="off"
+            spellCheck={false}
+            style={inputStyle}
+          />
+          <button
+            type="button"
+            onClick={() => setReveal((v) => !v)}
+            style={revealBtnStyle}
+            aria-pressed={reveal}
+            aria-label={reveal ? 'Hide API key' : 'Show API key'}
+          >
+            {reveal ? 'Hide' : 'Show'}
+          </button>
+        </div>
         <div style={rowStyle}>
           <button type="button" onClick={onClose} style={ghostBtnStyle}>
             Cancel
@@ -88,8 +126,15 @@ const dialogStyle: React.CSSProperties = {
   fontSize: 14,
 };
 
+const inputRowStyle: React.CSSProperties = {
+  display: 'flex',
+  gap: 6,
+  alignItems: 'stretch',
+};
+
 const inputStyle: React.CSSProperties = {
-  width: '100%',
+  flex: 1,
+  minWidth: 0,
   boxSizing: 'border-box',
   background: 'rgba(0,0,0,0.4)',
   border: '1px solid rgba(155, 231, 255, 0.25)',
@@ -98,6 +143,34 @@ const inputStyle: React.CSSProperties = {
   padding: '8px 10px',
   outline: 'none',
   fontFamily: 'ui-monospace, Menlo, Consolas, monospace',
+};
+
+const revealBtnStyle: React.CSSProperties = {
+  background: 'rgba(155, 231, 255, 0.08)',
+  color: '#bff3ff',
+  border: '1px solid rgba(155, 231, 255, 0.25)',
+  borderRadius: 8,
+  padding: '6px 10px',
+  cursor: 'pointer',
+  fontSize: 12,
+};
+
+const savedBannerStyle: React.CSSProperties = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: 8,
+  margin: '0 0 8px 0',
+  padding: '6px 8px',
+  borderRadius: 8,
+  background: 'rgba(93, 212, 255, 0.08)',
+  border: '1px solid rgba(155, 231, 255, 0.2)',
+  color: '#bff3ff',
+  fontSize: 12,
+};
+
+const savedKeyStyle: React.CSSProperties = {
+  fontFamily: 'ui-monospace, Menlo, Consolas, monospace',
+  letterSpacing: 0.4,
 };
 
 const rowStyle: React.CSSProperties = {

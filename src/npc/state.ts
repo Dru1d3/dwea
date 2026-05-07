@@ -5,8 +5,12 @@ import type { NpcMode, Vec2 } from './types.js';
 const DEFAULT_INITIAL_POSITION: Vec2 = { x: -1.2, z: 1.2 };
 const DEFAULT_WANDER_RADIUS = 1.5;
 
-const WANDER_INTERVAL_MS_MIN = 8000;
-const WANDER_INTERVAL_MS_MAX = 14000;
+// Tightened from 8-14 s to 3.5-7 s so the husky reads as actively living in
+// the scene (per CEO/board feedback on the DWEA-34 preview). The post-user
+// quiet window is the lower bound — long enough to let a fresh chat reply
+// finish landing before Mara wanders off again.
+const WANDER_INTERVAL_MS_MIN = 3500;
+const WANDER_INTERVAL_MS_MAX = 7000;
 
 export interface NpcState {
   position: Vec2;

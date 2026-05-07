@@ -64,8 +64,8 @@ describe('pickNpcClip', () => {
 });
 
 describe('npcFacingYaw', () => {
-  // The Soldier rig's visual front is along world -Z. With rotation.y = 0 the
-  // model already faces -Z, so a target straight ahead (smaller z) should
+  // Husky rig (DWEA-32) faces +Z at rest. With rotation.y = 0 the model's
+  // head points at +Z, so a target with larger z (straight ahead) should
   // yield yaw 0. These cases lock the four cardinal directions in.
   const TWO_PI = Math.PI * 2;
   const wrap = (a: number) => ((a % TWO_PI) + TWO_PI) % TWO_PI;
@@ -74,27 +74,26 @@ describe('npcFacingYaw', () => {
     expect(npcFacingYaw({ x: 0, z: 0 }, { x: 0, z: 0 })).toBeNull();
   });
 
-  it('faces -Z (forward) for a target with smaller z', () => {
-    const yaw = npcFacingYaw({ x: 0, z: 0 }, { x: 0, z: -1 });
+  it('faces +Z (forward) for a target with larger z', () => {
+    const yaw = npcFacingYaw({ x: 0, z: 0 }, { x: 0, z: 1 });
     expect(yaw).not.toBeNull();
     expect(wrap(yaw as number)).toBeCloseTo(0, 5);
   });
 
-  it('faces +X for a target to the right (rotation.y = -π/2 modulo 2π)', () => {
+  it('faces +X for a target to the right (rotation.y = π/2)', () => {
     const yaw = npcFacingYaw({ x: 0, z: 0 }, { x: 1, z: 0 });
-    expect(yaw).not.toBeNull();
-    // -π/2 ≡ 3π/2 (mod 2π)
-    expect(wrap(yaw as number)).toBeCloseTo((3 * Math.PI) / 2, 5);
-  });
-
-  it('faces -X for a target to the left (rotation.y = π/2)', () => {
-    const yaw = npcFacingYaw({ x: 0, z: 0 }, { x: -1, z: 0 });
     expect(yaw).not.toBeNull();
     expect(wrap(yaw as number)).toBeCloseTo(Math.PI / 2, 5);
   });
 
-  it('faces +Z (backward in rig-local) for a target with larger z', () => {
-    const yaw = npcFacingYaw({ x: 0, z: 0 }, { x: 0, z: 1 });
+  it('faces -X for a target to the left (rotation.y = -π/2 ≡ 3π/2)', () => {
+    const yaw = npcFacingYaw({ x: 0, z: 0 }, { x: -1, z: 0 });
+    expect(yaw).not.toBeNull();
+    expect(wrap(yaw as number)).toBeCloseTo((3 * Math.PI) / 2, 5);
+  });
+
+  it('faces -Z (backward) for a target with smaller z', () => {
+    const yaw = npcFacingYaw({ x: 0, z: 0 }, { x: 0, z: -1 });
     expect(yaw).not.toBeNull();
     expect(wrap(yaw as number)).toBeCloseTo(Math.PI, 5);
   });
