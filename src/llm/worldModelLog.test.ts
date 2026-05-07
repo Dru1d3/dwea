@@ -21,6 +21,7 @@ function makeResponse(moodDrift: number, utterance = 'hi'): MonsterResponse {
       goal: 'be helpful',
       mood_drift: moodDrift,
     },
+    memory_writes: [],
   };
 }
 

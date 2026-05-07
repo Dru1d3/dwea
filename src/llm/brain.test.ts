@@ -15,6 +15,10 @@ const validWorldModel = {
   mood_drift: 0.05,
 };
 
+const validMemoryWrites = [
+  { file: 'facts_about_user.md', op: 'append', content: 'their name is Sam', secret: false },
+];
+
 const validRaw = JSON.stringify({
   schemaVersion: BRAIN_SCHEMA_VERSION,
   utterance: 'Oh hi.',
@@ -25,6 +29,7 @@ const validRaw = JSON.stringify({
     { kind: 'set_face', x: 0, z: 0, clip: '', expression: 'curious', intensity: 0.7 },
   ],
   world_model: validWorldModel,
+  memory_writes: validMemoryWrites,
 });
 
 describe('parseMonsterResponse', () => {
@@ -41,6 +46,53 @@ describe('parseMonsterResponse', () => {
       goal: 'greet the user warmly',
       mood_drift: 0.05,
     });
+    expect(r.memory_writes).toEqual([
+      { file: 'facts_about_user.md', op: 'append', content: 'their name is Sam', secret: false },
+    ]);
+  });
+
+  it('drops memory_writes with unknown file or op', () => {
+    const raw = JSON.stringify({
+      schemaVersion: BRAIN_SCHEMA_VERSION,
+      utterance: 'hi',
+      emotion: 'happy',
+      intention: '',
+      actions: [],
+      world_model: validWorldModel,
+      memory_writes: [
+        { file: 'random.md', op: 'append', content: 'x', secret: false },
+        { file: 'facts_about_user.md', op: 'noop', content: 'x', secret: false },
+        { file: 'facts_about_user.md', op: 'replace', content: '', secret: false },
+        { file: 'relationship_state.md', op: 'replace', content: 'good', secret: false },
+        // Encrypted-secret entry without a file is allowed (lands in the
+        // secrets index regardless).
+        { file: '', op: '', content: 'a hidden party next week', secret: true },
+      ],
+    });
+    const r = parseMonsterResponse(raw, MARA_BIBLE);
+    expect(r.memory_writes).toEqual([
+      { file: 'relationship_state.md', op: 'replace', content: 'good', secret: false },
+      { file: '', op: '', content: 'a hidden party next week', secret: true },
+    ]);
+  });
+
+  it('caps memory_writes at the per-turn limit', () => {
+    const raw = JSON.stringify({
+      schemaVersion: BRAIN_SCHEMA_VERSION,
+      utterance: 'hi',
+      emotion: 'happy',
+      intention: '',
+      actions: [],
+      world_model: validWorldModel,
+      memory_writes: Array.from({ length: 12 }, (_v, i) => ({
+        file: 'facts_about_user.md',
+        op: 'append',
+        content: `fact ${i}`,
+        secret: false,
+      })),
+    });
+    const r = parseMonsterResponse(raw, MARA_BIBLE);
+    expect(r.memory_writes.length).toBeLessThanOrEqual(4);
   });
 
   it('coerces unknown emotion to the bible default', () => {
@@ -221,7 +273,7 @@ describe('parseMonsterResponse', () => {
 });
 
 describe('getBrainEnvelopeSchema', () => {
-  it('declares world_model as required alongside the v0 fields', () => {
+  it('declares world_model and memory_writes as required alongside the v0 fields', () => {
     const schema = getBrainEnvelopeSchema();
     expect(schema.required).toEqual(
       expect.arrayContaining([
@@ -231,6 +283,7 @@ describe('getBrainEnvelopeSchema', () => {
         'intention',
         'actions',
         'world_model',
+        'memory_writes',
       ]),
     );
   });
