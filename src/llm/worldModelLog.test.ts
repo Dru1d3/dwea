@@ -29,7 +29,10 @@ interface Captured {
   warn: unknown[][];
 }
 
-function captureConsole(): { console: { info: typeof console.info; warn: typeof console.warn }; out: Captured } {
+function captureConsole(): {
+  console: { info: typeof console.info; warn: typeof console.warn };
+  out: Captured;
+} {
   const out: Captured = { info: [], warn: [] };
   return {
     console: {
