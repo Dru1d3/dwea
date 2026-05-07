@@ -1,17 +1,28 @@
+import { useGLTF } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
-import { useRef } from 'react';
-import type { Group } from 'three';
-import { NPC_FLOAT_OFFSET, idleBob, stepTowardTarget } from './movement.js';
+import { Suspense, useEffect, useMemo, useRef } from 'react';
+import { type AnimationAction, AnimationMixer, type Group, LoopRepeat } from 'three';
+import { SkeletonUtils } from 'three-stdlib';
+import { type NpcClip, npcFacingYaw, pickNpcClip, stepTowardTarget } from './movement.js';
 import type { Vec2 } from './types.js';
 
-/**
- * Placeholder mesh for Mara: a soft glowing capsule with two eye-dots.
- * Walks toward `target` while it differs from `position`, otherwise bobs.
- *
- * This component owns no NPC state — the parent passes `position`, `target`,
- * and an `onPositionChange` callback. That keeps the LLM scene preamble in
- * sync with what the renderer is showing.
- */
+const SOLDIER_URL = `${import.meta.env.BASE_URL}models/Soldier.glb`;
+
+// The animation cross-fade window. Short fade → snappy idle↔walk transitions.
+const ANIM_FADE = 0.18;
+
+// Mara is the demo "monster" NPC — scale her up from native human (1.83 m)
+// so she reads as a creature rather than a tiny background figure at the
+// camera distances the splat scenes use.
+const NPC_SCALE = 1.6;
+
+// Soldier.glb's feet sit at y=0 in scene-local; lifting the rig by this much
+// keeps her toes visibly above the noisy splat floor in scenes where the
+// lower percentile of gaussians sits a few cm above navigation.groundY.
+const FEET_CLEARANCE = 0.05;
+
+useGLTF.preload(SOLDIER_URL);
+
 export interface NpcProps {
   position: Vec2;
   target: Vec2 | null;
@@ -20,19 +31,62 @@ export interface NpcProps {
   onTargetReached: () => void;
 }
 
-export function Npc({
-  position,
-  target,
-  groundY = 0,
-  onPositionChange,
-  onTargetReached,
-}: NpcProps) {
+export function Npc(props: NpcProps) {
+  return (
+    <Suspense fallback={null}>
+      <RiggedNpc {...props} />
+    </Suspense>
+  );
+}
+
+function RiggedNpc({ position, target, groundY = 0, onPositionChange, onTargetReached }: NpcProps) {
   const group = useRef<Group>(null);
-  const elapsed = useRef(0);
+  const gltf = useGLTF(SOLDIER_URL);
+
+  // Per-mount clone of the GLB scene so this NPC's skeleton is independent
+  // of the player Character's Soldier (drei caches the original gltf.scene).
+  const scene = useMemo(() => {
+    const cloned = SkeletonUtils.clone(gltf.scene);
+    cloned.traverse((obj) => {
+      const mesh = obj as { isMesh?: boolean; castShadow?: boolean; receiveShadow?: boolean };
+      if (mesh.isMesh) {
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+      }
+    });
+    return cloned;
+  }, [gltf.scene]);
+
+  // Build the AnimationMixer + idle/walk actions once per cloned scene.
+  const animation = useMemo(() => {
+    const mixer = new AnimationMixer(scene);
+    const actions: Record<'idle' | 'walk', AnimationAction | null> = {
+      idle: null,
+      walk: null,
+    };
+    for (const clip of gltf.animations) {
+      const name = clip.name.toLowerCase();
+      if (name === 'idle' || name === 'walk') {
+        const action = mixer.clipAction(clip);
+        action.setLoop(LoopRepeat, Number.POSITIVE_INFINITY);
+        actions[name] = action;
+      }
+    }
+    return { mixer, actions };
+  }, [scene, gltf.animations]);
+
+  // Default to idle on mount so the NPC is animating before any walk target.
+  useEffect(() => {
+    const idle = animation.actions.idle;
+    idle?.reset().fadeIn(ANIM_FADE).play();
+    return () => {
+      animation.mixer.stopAllAction();
+    };
+  }, [animation]);
+
+  const currentClip = useRef<NpcClip>('idle');
 
   useFrame((_, delta) => {
-    elapsed.current += delta;
-
     const { next, reached } = stepTowardTarget(position, target, delta);
     if (next.x !== position.x || next.z !== position.z) {
       onPositionChange(next);
@@ -44,45 +98,34 @@ export function Npc({
     if (group.current) {
       group.current.position.x = next.x;
       group.current.position.z = next.z;
-      group.current.position.y = idleBob(elapsed.current, groundY + NPC_FLOAT_OFFSET);
+      group.current.position.y = groundY + FEET_CLEARANCE;
 
-      // Face direction of travel when walking.
+      // Face direction of travel when walking; preserve last facing on the
+      // arrival frame so we don't snap to a zero-length direction.
       if (target && !reached) {
-        const yaw = Math.atan2(target.x - next.x, target.z - next.z);
-        group.current.rotation.y = yaw;
+        const yaw = npcFacingYaw(next, target);
+        if (yaw !== null) {
+          group.current.rotation.y = yaw;
+        }
       }
     }
+
+    // Drive idle ↔ walk based on whether we have an unreached target.
+    const wantClip = pickNpcClip(target, reached);
+    if (wantClip !== currentClip.current) {
+      const next = animation.actions[wantClip];
+      const prev = animation.actions[currentClip.current];
+      next?.reset().fadeIn(ANIM_FADE).play();
+      prev?.fadeOut(ANIM_FADE);
+      currentClip.current = wantClip;
+    }
+
+    animation.mixer.update(delta);
   });
 
   return (
-    <group ref={group}>
-      {/* Soft glow sphere */}
-      <mesh>
-        <sphereGeometry args={[0.32, 24, 16]} />
-        <meshStandardMaterial
-          color="#9be7ff"
-          emissive="#5dd4ff"
-          emissiveIntensity={0.9}
-          roughness={0.3}
-          metalness={0.0}
-        />
-      </mesh>
-      {/* Halo ring */}
-      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
-        <ringGeometry args={[0.36, 0.42, 32]} />
-        <meshBasicMaterial color="#bff3ff" transparent opacity={0.35} />
-      </mesh>
-      {/* Eyes — two tiny dark orbs facing +Z (the "front" we yaw to face) */}
-      <mesh position={[-0.08, 0.06, 0.28]}>
-        <sphereGeometry args={[0.035, 12, 8]} />
-        <meshBasicMaterial color="#0c1f2c" />
-      </mesh>
-      <mesh position={[0.08, 0.06, 0.28]}>
-        <sphereGeometry args={[0.035, 12, 8]} />
-        <meshBasicMaterial color="#0c1f2c" />
-      </mesh>
-      {/* Subtle point light so the splat catches Mara's glow */}
-      <pointLight color="#9be7ff" intensity={1.2} distance={2.5} decay={2} />
+    <group ref={group} name="npc-soldier" scale={NPC_SCALE}>
+      <primitive object={scene} />
     </group>
   );
 }

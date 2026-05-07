@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { NPC_BASE_HEIGHT, idleBob, randomWanderTarget, stepTowardTarget } from './movement.js';
+import {
+  NPC_BASE_HEIGHT,
+  idleBob,
+  npcFacingYaw,
+  pickNpcClip,
+  randomWanderTarget,
+  stepTowardTarget,
+} from './movement.js';
 
 describe('stepTowardTarget', () => {
   it('returns the same position when no target is set', () => {
@@ -38,6 +45,58 @@ describe('idleBob', () => {
     // Mara stays close to the configured base height (NPC_BASE_HEIGHT).
     expect(min).toBeGreaterThan(NPC_BASE_HEIGHT - 0.2);
     expect(max).toBeLessThan(NPC_BASE_HEIGHT + 0.2);
+  });
+});
+
+describe('pickNpcClip', () => {
+  it('returns walk when there is an unreached target', () => {
+    expect(pickNpcClip({ x: 1, z: 0 }, false)).toBe('walk');
+  });
+
+  it('returns idle when there is no target', () => {
+    expect(pickNpcClip(null, false)).toBe('idle');
+    expect(pickNpcClip(null, true)).toBe('idle');
+  });
+
+  it('returns idle on the frame the target is reached', () => {
+    expect(pickNpcClip({ x: 1, z: 0 }, true)).toBe('idle');
+  });
+});
+
+describe('npcFacingYaw', () => {
+  // The Soldier rig's visual front is along world -Z. With rotation.y = 0 the
+  // model already faces -Z, so a target straight ahead (smaller z) should
+  // yield yaw 0. These cases lock the four cardinal directions in.
+  const TWO_PI = Math.PI * 2;
+  const wrap = (a: number) => ((a % TWO_PI) + TWO_PI) % TWO_PI;
+
+  it('returns null when there is no movement direction', () => {
+    expect(npcFacingYaw({ x: 0, z: 0 }, { x: 0, z: 0 })).toBeNull();
+  });
+
+  it('faces -Z (forward) for a target with smaller z', () => {
+    const yaw = npcFacingYaw({ x: 0, z: 0 }, { x: 0, z: -1 });
+    expect(yaw).not.toBeNull();
+    expect(wrap(yaw as number)).toBeCloseTo(0, 5);
+  });
+
+  it('faces +X for a target to the right (rotation.y = -π/2 modulo 2π)', () => {
+    const yaw = npcFacingYaw({ x: 0, z: 0 }, { x: 1, z: 0 });
+    expect(yaw).not.toBeNull();
+    // -π/2 ≡ 3π/2 (mod 2π)
+    expect(wrap(yaw as number)).toBeCloseTo((3 * Math.PI) / 2, 5);
+  });
+
+  it('faces -X for a target to the left (rotation.y = π/2)', () => {
+    const yaw = npcFacingYaw({ x: 0, z: 0 }, { x: -1, z: 0 });
+    expect(yaw).not.toBeNull();
+    expect(wrap(yaw as number)).toBeCloseTo(Math.PI / 2, 5);
+  });
+
+  it('faces +Z (backward in rig-local) for a target with larger z', () => {
+    const yaw = npcFacingYaw({ x: 0, z: 0 }, { x: 0, z: 1 });
+    expect(yaw).not.toBeNull();
+    expect(wrap(yaw as number)).toBeCloseTo(Math.PI, 5);
   });
 });
 
