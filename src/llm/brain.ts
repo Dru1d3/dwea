@@ -9,7 +9,7 @@
  * The renderer never sees raw model text; it dispatches `actions[]` against
  * an action surface (walk_to / look_at / play_animation / set_face) and
  * speaks `utterance` through the configured TTS. `world_model` is consumed
- * by structured logs / QA harness — see [docs/decisions/0008-world-model-envelope.md](../../docs/decisions/0008-world-model-envelope.md).
+ * by structured logs / QA harness — see [docs/decisions/0010-world-model-envelope.md](../../docs/decisions/0010-world-model-envelope.md).
  *
  * One round-trip per user turn, non-streaming. Streaming JSON-schema parsing
  * is fragile and the envelopes are short (~400 tokens), so the simpler shape
@@ -22,7 +22,7 @@ const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 /**
  * Bumped from '1' -> '1.1' to mark the addition of the `world_model` block.
- * Consumers that pin an exact version must read [docs/decisions/0008-world-model-envelope.md](../../docs/decisions/0008-world-model-envelope.md)
+ * Consumers that pin an exact version must read [docs/decisions/0010-world-model-envelope.md](../../docs/decisions/0010-world-model-envelope.md)
  * — the envelope is additive (v1 fields unchanged) but the version moves so
  * downstream tooling can branch on shape without sniffing keys.
  */
