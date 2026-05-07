@@ -331,9 +331,53 @@ export async function runMonsterBrain(args: BrainCallArgs): Promise<BrainCallRes
   if (replyJson.error) {
     throw new Error(replyJson.error.message ?? `OpenRouter error ${replyJson.error.code ?? ''}`);
   }
-  const content = replyJson.choices?.[0]?.message?.content ?? '';
+  const choice = replyJson.choices?.[0];
+  const content = choice?.message?.content ?? '';
+  if (choice?.finish_reason === 'length') {
+    // Token budget cut the JSON mid-emit. Tell the user something useful
+    // instead of leaking the JSON parser's "Unexpected EOF" downstream.
+    throw new Error('brain: reply truncated (raise MAX_OUTPUT_TOKENS)');
+  }
   const response = parseMonsterResponse(content, bible);
   const totalMs = performance.now() - startedAt;
 
   return { response, firstByteMs, totalMs, modeUsed: mode };
+}
+
+/**
+ * Fire-and-forget warmup against OpenRouter. The free-tier providers we
+ * route to have noticeable cold-starts on first request — pre-warming the
+ * route while the user is still inspecting the scene saves ~3-8 s off the
+ * first real reply. Failures are swallowed: a warm-up that fails just means
+ * the next real call pays the full cold-start.
+ */
+export async function prewarmBrain(
+  apiKey: string,
+  bible: MonsterBible,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (!apiKey) return;
+  try {
+    await fetch(OPENROUTER_URL, {
+      method: 'POST',
+      signal: signal ?? null,
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer':
+          typeof window === 'undefined' ? 'https://dwea.local' : window.location.origin,
+        'X-Title': 'DWEA',
+      },
+      body: JSON.stringify({
+        model: bible.model,
+        max_tokens: 1,
+        stream: false,
+        reasoning: { exclude: true, effort: 'low' },
+        provider: { sort: 'throughput' },
+        messages: [{ role: 'user', content: 'ok' }],
+      }),
+    });
+  } catch {
+    // Warmup is best-effort; the next real call pays the cold-start instead.
+  }
 }

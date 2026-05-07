@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { type MonsterBible, defaultBible } from '../llm/bible.js';
-import { type ChatTurn, type SceneState, runMonsterBrain } from '../llm/brain.js';
+import { type ChatTurn, type SceneState, prewarmBrain, runMonsterBrain } from '../llm/brain.js';
 import { pickGreeting } from '../llm/personality.js';
 import { rotateGreetingSeed } from '../llm/storage.js';
 import { type VoiceHandle, createVoice } from '../llm/voice.js';
@@ -63,6 +63,25 @@ export function useChat(args: UseChatArgs) {
       handle?.cancel();
     };
   }, []);
+
+  // Pre-warm OpenRouter's free-tier provider routing the first time we see
+  // an API key. The free model has a 3-8 s cold start on the first real
+  // call; firing a 1-token ping while the user is still looking at the
+  // scene means the first chat turn lands on a hot path. We only warm
+  // once per (apiKey, bible.model) pair so user-key edits or bible swaps
+  // each get exactly one warmup, not every render.
+  const warmedKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!apiKey) return;
+    const tag = `${apiKey}::${bible.model}`;
+    if (warmedKeyRef.current === tag) return;
+    warmedKeyRef.current = tag;
+    const ctrl = new AbortController();
+    void prewarmBrain(apiKey, bible, ctrl.signal);
+    return () => {
+      ctrl.abort();
+    };
+  }, [apiKey, bible]);
 
   const intentRef = useRef<NpcIntentSurface | undefined>(intent);
   intentRef.current = intent;
