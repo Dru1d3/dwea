@@ -13,12 +13,12 @@ export const NPC_NAME = 'Mara';
 export const NPC_MODEL = 'openai/gpt-oss-120b:free';
 
 export const MAX_HISTORY_TURNS = 6;
-// Bumped from 256 -> 512 because the post-DWEA-34-review prompt requires
-// >=1 action per turn (utterance + intention + 1-3 actions). 256 was
-// truncating the JSON envelope mid-array, surfacing as
-// `JSON Parse error: Unexpected EOF` in the chat panel. 512 leaves
-// comfortable headroom for the heaviest 3-action reply.
-export const MAX_OUTPUT_TOKENS = 512;
+// v0 cap was 256 (truncated the JSON mid-array); raised to 512 for the
+// post-DWEA-34-review prompt that requires >=1 action per turn. v1.1
+// adds the `world_model` block (5 fields, two short string arrays) which
+// adds ~120-180 output tokens; bumping to 768 keeps the heaviest reply
+// off the `finish_reason: length` truncation path.
+export const MAX_OUTPUT_TOKENS = 768;
 
 export const SYSTEM_PROMPT = [
   `You are ${NPC_NAME}, a small curious wandering spirit who lives inside a 3D scene built from a gaussian splat capture.`,

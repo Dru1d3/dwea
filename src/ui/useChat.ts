@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type MonsterBible, defaultBible } from '../llm/bible.js';
 import { type ChatTurn, type SceneState, prewarmBrain, runMonsterBrain } from '../llm/brain.js';
 import { pickGreeting } from '../llm/personality.js';
 import { rotateGreetingSeed } from '../llm/storage.js';
 import { type VoiceHandle, createVoice } from '../llm/voice.js';
+import { type WorldModelLogger, createWorldModelLogger } from '../llm/worldModelLog.js';
 import type { EmotionState } from '../npc/emotion.js';
 import { DEFAULT_EMOTION } from '../npc/emotion.js';
 import type { NpcIntentSurface } from '../npc/intent.js';
@@ -54,6 +55,13 @@ export function useChat(args: UseChatArgs) {
 
   const voiceRef = useRef<VoiceHandle | null>(null);
   if (!voiceRef.current) voiceRef.current = createVoice(bible);
+
+  // One world_model logger per (bible) chat session. Recreated when the
+  // bible swaps so turn indexes reset alongside the persona.
+  const logger: WorldModelLogger = useMemo(
+    () => createWorldModelLogger({ bibleId: bible.id }),
+    [bible.id],
+  );
 
   // Cancel in-flight TTS on unmount so navigating away never leaks a
   // talking voice into the next page.
@@ -118,6 +126,12 @@ export function useChat(args: UseChatArgs) {
 
         const { response } = result;
 
+        // Log the world_model block before any UI side-effects so the QA
+        // harness sees every successful turn even if TTS or dispatch later
+        // throws. driftWarning logs at console.warn for v1 visibility; once
+        // the v1.5 QA harness lands it can switch to the structured sink.
+        logger.recordTurn(response);
+
         // Update transcript first so the user sees text even if TTS fails.
         setMessages((prev) =>
           prev.map((m) =>
@@ -167,7 +181,7 @@ export function useChat(args: UseChatArgs) {
         setBusy(false);
       }
     },
-    [apiKey, busy, messages, getScene, bible],
+    [apiKey, busy, messages, getScene, bible, logger],
   );
 
   // Re-derived each render from the rolling buffer. The reference to
