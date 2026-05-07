@@ -1,13 +1,16 @@
 import { useCallback, useRef, useState } from 'react';
+import type { CharacterIntentSurface } from '../character/intent.js';
 import {
   type ChatTurn,
-  type NpcClient,
+  type MotorClient,
   type SceneState,
-  createNpcClient,
-  streamNpcReply,
-} from '../llm/openrouter.js';
-import { pickGreeting } from '../llm/personality.js';
+  createMotorClient,
+  renderToolCallSummary,
+  streamMotorReply,
+} from '../llm/motor.js';
+import { NPC_MODEL, pickGreeting } from '../llm/personality.js';
 import { rotateGreetingSeed } from '../llm/storage.js';
+import type { ParsedToolCall } from '../llm/tools.js';
 import type { ChatMessage } from './ChatPanel.js';
 
 const LATENCY_AVERAGE_WINDOW = 5;
@@ -16,15 +19,26 @@ function uid(): string {
   return Math.random().toString(36).slice(2) + performance.now().toString(36);
 }
 
-/**
- * Single owner of chat state, the Anthropic client lifecycle, and latency
- * stats. App.tsx wires `apiKey`, `getScene`, and renders the messages.
- */
-export function useChat(args: {
+export interface UseChatOptions {
   apiKey: string;
   getScene: () => SceneState;
-}) {
-  const { apiKey, getScene } = args;
+  /** Optional override for the OpenRouter model id. */
+  model?: string;
+  /**
+   * Returns the live `CharacterIntentSurface` so emitted tool calls drive
+   * the rendered character. Pulled lazily because the surface only exists
+   * after `<CharacterIntentBridge>` has mounted inside the Canvas.
+   */
+  getIntent?: () => CharacterIntentSurface | null;
+}
+
+/**
+ * Single owner of chat state, OpenRouter motor client, and latency stats.
+ * Drives the LLM motor described in `src/llm/motor.ts`: the model can both
+ * stream a text reply AND emit tool calls that move Mara mid-stream.
+ */
+export function useChat(args: UseChatOptions) {
+  const { apiKey, getScene, model, getIntent } = args;
 
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
     {
@@ -37,15 +51,19 @@ export function useChat(args: {
   const [lastFirstTokenMs, setLastFirstTokenMs] = useState<number | null>(null);
   const recentLatenciesRef = useRef<number[]>([]);
 
-  const clientRef = useRef<NpcClient | null>(null);
+  const clientRef = useRef<MotorClient | null>(null);
   const lastKeyRef = useRef<string>('');
-  if (apiKey && apiKey !== lastKeyRef.current) {
-    clientRef.current = createNpcClient(apiKey);
+  const lastModelRef = useRef<string>('');
+  const activeModel = model && model.length > 0 ? model : NPC_MODEL;
+  if (apiKey && (apiKey !== lastKeyRef.current || activeModel !== lastModelRef.current)) {
+    clientRef.current = createMotorClient({ apiKey, model: activeModel });
     lastKeyRef.current = apiKey;
+    lastModelRef.current = activeModel;
   }
   if (!apiKey && lastKeyRef.current) {
     clientRef.current = null;
     lastKeyRef.current = '';
+    lastModelRef.current = '';
   }
 
   const send = useCallback(
@@ -64,9 +82,6 @@ export function useChat(args: {
       setMessages((prev) => [...prev, userMsg, placeholder]);
       setBusy(true);
 
-      // Build the history for the model from the messages we had BEFORE this
-      // turn. We deliberately exclude the just-added placeholder so the model
-      // doesn't see its own empty turn.
       const priorTurns: ChatTurn[] = messages
         .filter(
           (m): m is ChatMessage & { role: 'user' | 'assistant' } => !m.pending && m.text.length > 0,
@@ -74,12 +89,16 @@ export function useChat(args: {
         .map((m) => ({ role: m.role, text: m.text }));
 
       let streamed = '';
+      const collectedToolCalls: ParsedToolCall[] = [];
 
-      await streamNpcReply({
+      const intent = getIntent?.() ?? undefined;
+
+      await streamMotorReply({
         client,
         history: priorTurns,
         userMessage: text,
         scene: getScene(),
+        ...(intent ? { intent } : {}),
         handlers: {
           onFirstToken: (latencyMs) => {
             setLastFirstTokenMs(latencyMs);
@@ -93,9 +112,42 @@ export function useChat(args: {
               prev.map((m) => (m.id === assistantId ? { ...m, text: streamed } : m)),
             );
           },
-          onFinal: (full) => {
+          onToolCall: (call) => {
+            collectedToolCalls.push(call);
+            // If the model only emits tool calls and no `speak` text, surface
+            // a humanized echo so the chat panel doesn't go silent. `speak`
+            // tool already prints its own text, so skip the echo for it.
+            if (call.name === 'speak') {
+              const next = streamed.length > 0 ? `${streamed} ${call.text}` : call.text;
+              streamed = next;
+              setMessages((prev) =>
+                prev.map((m) => (m.id === assistantId ? { ...m, text: streamed } : m)),
+              );
+            }
+          },
+          onToolCallParseError: (err) => {
+            // Dev-visible only: log so we can spot models that are emitting
+            // malformed tool calls without surfacing it to the founder.
+            console.warn('[motor] tool call parse error:', err.message);
+          },
+          onFinal: (final) => {
+            // If the model emitted only tool calls (no content text), keep a
+            // small action summary in the chat history so the user sees that
+            // something happened.
+            const fallback =
+              final.text.trim().length === 0 && final.toolCalls.length > 0
+                ? final.toolCalls.map(renderToolCallSummary).join('  ·  ')
+                : final.text;
             setMessages((prev) =>
-              prev.map((m) => (m.id === assistantId ? { ...m, text: full, pending: false } : m)),
+              prev.map((m) =>
+                m.id === assistantId
+                  ? {
+                      ...m,
+                      text: fallback,
+                      pending: false,
+                    }
+                  : m,
+              ),
             );
             setBusy(false);
           },
@@ -116,14 +168,11 @@ export function useChat(args: {
         },
       });
     },
-    [busy, messages, getScene],
+    [busy, messages, getScene, getIntent],
   );
 
-  // Computed each render from the rolling buffer. Cheap (window of 5).
   const buf = recentLatenciesRef.current;
   const averageFirstTokenMs = buf.length === 0 ? null : buf.reduce((a, b) => a + b, 0) / buf.length;
-  // Reference lastFirstTokenMs so the average appears reactive — it updates
-  // alongside the latency state we just set.
   void lastFirstTokenMs;
 
   return {
