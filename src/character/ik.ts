@@ -23,24 +23,33 @@ interface IkBehaviour {
 }
 
 class HeadLookSolver implements IkBehaviour {
-  private readonly chain: IKChain;
-  private readonly ik: IK;
+  private readonly chain: IKChain | null;
+  private readonly ik: IK | null;
   private readonly targetNode: Object3D;
   private trackedTarget: Object3D | null = null;
   private trackedPoint: Vector3 | null = null;
   private active = false;
 
   constructor(humanoid: HumanoidHandle) {
-    const pelvis = bone(humanoid, 'pelvis');
-    const spine = bone(humanoid, 'spine');
-    const chest = bone(humanoid, 'chest');
-    const head = bone(humanoid, 'head');
-    const ee = endEffector(head);
+    const pelvis = optionalBone(humanoid, 'pelvis');
+    const spine = optionalBone(humanoid, 'spine');
+    const chest = optionalBone(humanoid, 'chest');
+    const head = optionalBone(humanoid, 'head');
 
     this.targetNode = new Object3D();
     this.targetNode.name = 'lookAtIKTarget';
     humanoid.root.add(this.targetNode);
 
+    if (!pelvis || !spine || !chest || !head) {
+      // Rig is missing one of the head-look chain bones (e.g., a quadruped
+      // skeleton without a clear `chest` analog). Leave the solver inert so
+      // `lookAt`/`releaseLookAt` calls become no-ops rather than crashing.
+      this.chain = null;
+      this.ik = null;
+      return;
+    }
+
+    const ee = endEffector(head);
     this.chain = new IKChain();
     const softCone = new IKBallConstraint(35);
     this.chain.add(new IKJoint(pelvis, { constraints: [softCone] }));
@@ -72,7 +81,7 @@ class HeadLookSolver implements IkBehaviour {
   }
 
   tick(): void {
-    if (!this.active) return;
+    if (!this.active || !this.ik) return;
     if (this.trackedTarget) {
       this.trackedTarget.getWorldPosition(this.targetNode.position);
     } else if (this.trackedPoint) {
@@ -89,23 +98,31 @@ class HeadLookSolver implements IkBehaviour {
 }
 
 class ArmPointSolver implements IkBehaviour {
-  private readonly chain: IKChain;
-  private readonly ik: IK;
+  private readonly chain: IKChain | null;
+  private readonly ik: IK | null;
   private readonly targetNode: Object3D;
   private trackedPoint: Vector3 | null = null;
   private trackedTarget: Object3D | null = null;
   private active = false;
 
   constructor(humanoid: HumanoidHandle) {
-    const shoulder = bone(humanoid, 'rShoulder');
-    const elbow = bone(humanoid, 'rElbow');
-    const wrist = bone(humanoid, 'rWrist');
-    const ee = endEffector(wrist);
+    const shoulder = optionalBone(humanoid, 'rShoulder');
+    const elbow = optionalBone(humanoid, 'rElbow');
+    const wrist = optionalBone(humanoid, 'rWrist');
 
     this.targetNode = new Object3D();
     this.targetNode.name = 'pointAtIKTarget';
     humanoid.root.add(this.targetNode);
 
+    if (!shoulder || !elbow || !wrist) {
+      // Quadruped or otherwise armless rig — leave the solver inert. The
+      // `point_at` intent then no-ops on this character without crashing.
+      this.chain = null;
+      this.ik = null;
+      return;
+    }
+
+    const ee = endEffector(wrist);
     this.chain = new IKChain();
     this.chain.add(new IKJoint(shoulder, { constraints: [new IKBallConstraint(120)] }));
     this.chain.add(new IKJoint(elbow, { constraints: [new IKBallConstraint(150)] }));
@@ -133,7 +150,7 @@ class ArmPointSolver implements IkBehaviour {
   }
 
   tick(): void {
-    if (!this.active) return;
+    if (!this.active || !this.ik) return;
     if (this.trackedTarget) {
       this.trackedTarget.getWorldPosition(this.targetNode.position);
     } else if (this.trackedPoint) {
@@ -147,12 +164,11 @@ class ArmPointSolver implements IkBehaviour {
   }
 }
 
-function bone(humanoid: HumanoidHandle, name: Parameters<HumanoidHandle['bone']>[0]): Object3D {
-  const node = humanoid.bone(name);
-  if (!node) {
-    throw new Error(`StubHumanoid is missing bone "${name}"`);
-  }
-  return node;
+function optionalBone(
+  humanoid: HumanoidHandle,
+  name: Parameters<HumanoidHandle['bone']>[0],
+): Object3D | null {
+  return humanoid.bone(name);
 }
 
 /**

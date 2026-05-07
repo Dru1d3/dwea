@@ -6,22 +6,27 @@ import { SkeletonUtils } from 'three-stdlib';
 import { type NpcClip, npcFacingYaw, pickNpcClip, stepTowardTarget } from './movement.js';
 import type { Vec2 } from './types.js';
 
-const SOLDIER_URL = `${import.meta.env.BASE_URL}models/Soldier.glb`;
+// DWEA-32 — switch the wandering NPC ("Mara") rig from Mixamo Soldier to the
+// Quaternius CC0 husky so the dwea-11-world-c preview renders a fully-rigged
+// dog with parity locomotion (idle/walk/gallop). The husky GLB ships its own
+// `Idle` and `Walk` clips at the canonical names the mixer below picks up.
+const NPC_GLB_URL = `${import.meta.env.BASE_URL}characters/husky-quaternius.glb`;
 
 // The animation cross-fade window. Short fade → snappy idle↔walk transitions.
 const ANIM_FADE = 0.18;
 
-// Mara is the demo "monster" NPC — scale her up from native human (1.83 m)
-// so she reads as a creature rather than a tiny background figure at the
-// camera distances the splat scenes use.
-const NPC_SCALE = 1.6;
+// Husky's AnimalArmature parent ships at scale=100 so the rest-pose mesh
+// reaches a ~3.2 m bbox in world units. 0.5 brings her down to ~1.6 m at
+// the head — still bigger than a real husky but reads as a creature without
+// dwarfing the splat scenes the camera frames.
+const NPC_SCALE = 0.5;
 
-// Soldier.glb's feet sit at y=0 in scene-local; lifting the rig by this much
-// keeps her toes visibly above the noisy splat floor in scenes where the
-// lower percentile of gaussians sits a few cm above navigation.groundY.
+// Husky's feet sit at y=0 in scene-local; lifting the rig by this much keeps
+// her paws visibly above the noisy splat floor in scenes where the lower
+// percentile of gaussians sits a few cm above navigation.groundY.
 const FEET_CLEARANCE = 0.05;
 
-useGLTF.preload(SOLDIER_URL);
+useGLTF.preload(NPC_GLB_URL);
 
 export interface NpcProps {
   position: Vec2;
@@ -41,10 +46,10 @@ export function Npc(props: NpcProps) {
 
 function RiggedNpc({ position, target, groundY = 0, onPositionChange, onTargetReached }: NpcProps) {
   const group = useRef<Group>(null);
-  const gltf = useGLTF(SOLDIER_URL);
+  const gltf = useGLTF(NPC_GLB_URL);
 
   // Per-mount clone of the GLB scene so this NPC's skeleton is independent
-  // of the player Character's Soldier (drei caches the original gltf.scene).
+  // of the player Character's husky (drei caches the original gltf.scene).
   const scene = useMemo(() => {
     const cloned = SkeletonUtils.clone(gltf.scene);
     cloned.traverse((obj) => {

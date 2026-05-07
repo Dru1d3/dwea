@@ -1,0 +1,39 @@
+husky-quaternius.glb
+====================
+
+Source asset
+------------
+- Title: "Husky" (from "Animated Animal Pack")
+- Author: Quaternius (Tomás Laulhé)
+- Source: https://poly.pizza/m/wcWiuEqwzq
+  (bundle: https://poly.pizza/bundle/Animated-Animal-Pack-ILAPXeUYiS)
+- License: CC0 1.0 Universal (Public Domain Dedication)
+  https://creativecommons.org/publicdomain/zero/1.0/
+- Direct GLB URL: https://static.poly.pizza/611d25c7-430f-4bb5-ab2c-d8f5f3cb9712.glb
+- Last verified: 2026-05-07
+
+What ships in this GLB
+----------------------
+- Quadruped rig: 49 joints (Body, Back, Torso/Torso2/Torso3, Neck1..3, Head,
+  Ear1..4 L/R, FrontShoulder L/R, FrontUpperLeg L/R, FrontLowerLeg L/R,
+  BackShoulder L/R, BackLeg L/R, BackUpperLeg L/R, BackLowerLeg L/R,
+  Tail1..6, plus IK pole-target helpers).
+- 12 animation clips (the runtime drops the duplicate `AnimalArmature|*`
+  prefixed copies that FBX2glTF emits): Idle, Idle_2, Idle_2_HeadLow, Walk,
+  Gallop, Gallop_Jump, Jump_ToIdle, Eating, Idle_HitReact_Left,
+  Idle_HitReact_Right, Attack, Death.
+- For DWEA-32 parity with the soldier rig: idle ← Idle, walk ← Walk,
+  run ← Gallop. The character pipeline lowercases clip names at load time
+  and renames the locomotion trio to match the existing humanoid contract.
+
+CC0 means no attribution is legally required. We still credit Quaternius in
+the registry's `credit` field — it's the right thing to do and helps future
+maintainers track provenance.
+
+Why no separate bake step
+-------------------------
+The poly.pizza GLB ships ready-to-use; no FBX→GLB conversion is needed (it
+was already baked by Quaternius via FBX2glTF v0.9.7). The only runtime
+fix-ups are: (a) drop the `AnimalArmature|*` clip duplicates, (b) lowercase
+clip names + rename Gallop→run for the player rig's locomotion contract.
+Both happen in code, not at bake time.
