@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MARA_BIBLE } from './bible.js';
-import { BRAIN_SCHEMA_VERSION, parseMonsterResponse } from './brain.js';
+import { BRAIN_SCHEMA_VERSION, parseMonsterResponse, sanitizeRawJson } from './brain.js';
 
 const validRaw = JSON.stringify({
   schemaVersion: BRAIN_SCHEMA_VERSION,
@@ -84,5 +84,45 @@ describe('parseMonsterResponse', () => {
 
   it('throws on invalid JSON', () => {
     expect(() => parseMonsterResponse('not json', MARA_BIBLE)).toThrow(/invalid JSON/);
+  });
+
+  it('repairs and parses a fenced + bad-escape envelope (real-world failure mode)', () => {
+    // Free-tier model output that broke the demo: "(:)" escaped as "\:)" and
+    // wrapped in a ```json fence. Both classes of damage should heal.
+    const damaged = [
+      '```json',
+      '{',
+      '  "schemaVersion": "1",',
+      '  "utterance": "Hi \\:)",',
+      '  "emotion": "happy",',
+      '  "intention": "greet",',
+      '  "actions": []',
+      '}',
+      '```',
+    ].join('\n');
+    const r = parseMonsterResponse(damaged, MARA_BIBLE);
+    expect(r.utterance).toBe('Hi :)');
+    expect(r.emotion).toBe('happy');
+  });
+});
+
+describe('sanitizeRawJson', () => {
+  it('strips json code fences', () => {
+    expect(sanitizeRawJson('```json\n{"a":1}\n```')).toBe('{"a":1}');
+    expect(sanitizeRawJson('```\n{"a":1}\n```')).toBe('{"a":1}');
+  });
+
+  it('replaces invalid backslash escapes with the literal character', () => {
+    expect(sanitizeRawJson('"hi \\:)"')).toBe('"hi :)"');
+    expect(sanitizeRawJson('"\\!\\?"')).toBe('"!?"');
+  });
+
+  it('keeps standard JSON escapes intact', () => {
+    const input = '"line1\\nline2\\t\\"quoted\\"\\u00e9"';
+    expect(sanitizeRawJson(input)).toBe(input);
+  });
+
+  it('drops a truncated unicode escape', () => {
+    expect(sanitizeRawJson('"oops\\u12"')).toBe('"oops12"');
   });
 });

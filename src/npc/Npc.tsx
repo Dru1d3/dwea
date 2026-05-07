@@ -101,7 +101,7 @@ function RiggedNpc({
 
   const currentClip = useRef<NpcClip>('idle');
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     const { next, reached } = stepTowardTarget(position, target, delta);
     if (next.x !== position.x || next.z !== position.z) {
       onPositionChange(next);
@@ -115,16 +115,22 @@ function RiggedNpc({
       group.current.position.z = next.z;
       group.current.position.y = groundY + FEET_CLEARANCE;
 
-      // Face direction of travel when walking; preserve last facing on the
-      // arrival frame so we don't snap to a zero-length direction.
+      // Facing priority: walk direction > brain look_at > camera. The camera
+      // fallback keeps the husky engaged with the user during idle moments
+      // instead of stiffly staring at world origin (DWEA-34 review feedback).
       if (target && !reached) {
         const yaw = npcFacingYaw(next, target);
         if (yaw !== null) {
           group.current.rotation.y = yaw;
         }
       } else if (facingTarget) {
-        // No walk in flight — let the LLM brain's look_at steer the head/body.
         const yaw = npcFacingYaw(next, facingTarget);
+        if (yaw !== null) {
+          group.current.rotation.y = yaw;
+        }
+      } else {
+        const cam = state.camera.position;
+        const yaw = npcFacingYaw(next, { x: cam.x, z: cam.z });
         if (yaw !== null) {
           group.current.rotation.y = yaw;
         }

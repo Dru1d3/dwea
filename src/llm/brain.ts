@@ -96,20 +96,21 @@ function buildBrainPrompt(bible: MonsterBible): string {
   return [
     bible.systemPrompt,
     '',
-    'You speak through a strict JSON envelope. The renderer parses each field and animates your body — the user only ever hears `utterance`. Every reply MUST be valid JSON matching the schema you were given.',
+    'You speak through a strict JSON envelope. The renderer parses each field and animates your body — the user only ever hears the utterance. Every reply MUST be valid JSON matching the schema you were given. No code fences, no commentary outside the JSON, no trailing text.',
+    'Inside string values, use ONLY valid JSON escapes (\\", \\\\, \\n, \\t, \\uXXXX). Plain text only — no emoticons, no smileys, no markdown formatting.',
     '',
     'Vocabulary you must stay inside:',
     `- emotion: one of ${bible.emotionVocab.join(', ')}`,
     `- play_animation.clip: one of ${bible.clipVocab.join(', ')} (empty string when no clip)`,
     '',
     'Action rules:',
-    '- "walk_to" sets x and z to a scene XZ point in metres. Use it freely — trot toward something the user is curious about, scamper a few metres to a new spot, or bound back to them. Stay roughly within ±3 m of your current XZ to keep the world readable. Set clip="", expression="", intensity=0.',
-    '- "look_at" turns your head and body toward a scene XZ point. Use it before speaking about something nearby. Set clip="", expression="", intensity=0.',
-    '- "play_animation" plays a known clip. Set x=0, z=0, expression="", intensity=0. Pick from the clip vocabulary above.',
-    '- "set_face" expresses an emotion. expression must match the emotion vocabulary; intensity is a 0..1 float. Set x=0, z=0, clip="".',
+    '- walk_to sets x and z to a scene XZ point in metres. Use it freely — trot toward something the user is curious about, scamper a few metres to a new spot, or bound back to them. Stay roughly within 3 m of your current XZ to keep the world readable. Set clip="", expression="", intensity=0.',
+    '- look_at turns your head and body toward a scene XZ point. Use it before speaking about something nearby. Set clip="", expression="", intensity=0.',
+    '- play_animation plays a known clip. Set x=0, z=0, expression="", intensity=0. Pick from the clip vocabulary above.',
+    '- set_face expresses an emotion. expression must match the emotion vocabulary; intensity is a 0..1 float. Set x=0, z=0, clip="".',
     '',
-    'You are a real, embodied creature — never just stand still. EVERY reply must include at least one action, and most replies should include 2–3. Combine actions: a typical turn is `look_at` + `walk_to` + `set_face`, or `walk_to` + `play_animation`. Idle staring is dull; pick a destination, react with your face, move.',
-    'Stay short. utterance: 1–2 sentences. actions: 1–3 entries. Do not repeat the same action kind twice in one turn.',
+    'You are a real, embodied creature — never just stand still. EVERY reply must include at least one action, and most replies should include 2 or 3. Combine actions: a typical turn is look_at, walk_to, and set_face together, or walk_to with play_animation. Idle staring is dull; pick a destination, react with your face, move.',
+    'Stay short. utterance: 1 to 2 sentences. actions: 1 to 3 entries. Do not repeat the same action kind twice in one turn.',
     'Never narrate (no parentheticals, no stage directions). Never mention being an AI, a model, or a JSON schema. If the user is hostile or off-topic, gently steer back to the world around you in character.',
   ].join('\n');
 }
@@ -142,6 +143,33 @@ function isObject(v: unknown): v is Record<string, unknown> {
 }
 
 /**
+ * Repair common ways the free-tier model breaks JSON:
+ *   - Wraps the envelope in ```json fences.
+ *   - Emits non-standard backslash escapes inside strings (e.g. `\:`, `\!`,
+ *     `\ ` for emoticons), which is the actual error class observed in the
+ *     wild ("Invalid escape character :)" was a `\)` next to a smiley).
+ *
+ * Everything that survives sanitisation still has to satisfy `JSON.parse` —
+ * we do NOT silently drop content, just neutralise the bytes we know strict
+ * parsers refuse.
+ */
+export function sanitizeRawJson(raw: string): string {
+  let s = raw.trim();
+  if (s.startsWith('```')) {
+    s = s.replace(/^```[a-zA-Z]*\s*/, '').replace(/```\s*$/, '');
+    s = s.trim();
+  }
+  // Replace any backslash escape that isn't one of the JSON-allowed forms
+  // ("\\\\", "\\\"", "\\/", "\\b", "\\f", "\\n", "\\r", "\\t", "\\uXXXX") with
+  // just the literal character that followed the slash. This kills the
+  // "\\:" / "\\)" / "\\(" sequences free models like to emit.
+  s = s.replace(/\\([^"\\/bfnrtu])/g, '$1');
+  // A trailing "\\u" with fewer than four hex digits is also fatal — drop it.
+  s = s.replace(/\\u(?![0-9a-fA-F]{4})/g, '');
+  return s;
+}
+
+/**
  * Defensive parser. Strict json_schema mode usually gives clean output, but
  * fallback (json_object) and provider drift mean we still validate every
  * field and coerce away the obvious junk before dispatch.
@@ -150,8 +178,15 @@ export function parseMonsterResponse(raw: string, bible: MonsterBible): MonsterR
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
-  } catch (err) {
-    throw new Error(`brain: invalid JSON (${(err as Error).message})`);
+  } catch (firstErr) {
+    // Free models occasionally emit ```json fences or non-JSON backslash
+    // escapes (e.g. "\:" inside a smiley). Repair-and-retry once before
+    // surfacing the error to the chat panel.
+    try {
+      parsed = JSON.parse(sanitizeRawJson(raw));
+    } catch {
+      throw new Error(`brain: invalid JSON (${(firstErr as Error).message})`);
+    }
   }
   if (!isObject(parsed)) throw new Error('brain: response is not an object');
 
