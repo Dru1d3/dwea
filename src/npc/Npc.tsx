@@ -31,6 +31,9 @@ useGLTF.preload(NPC_GLB_URL);
 export interface NpcProps {
   position: Vec2;
   target: Vec2 | null;
+  /** Optional non-walking facing target. Only honored when there is no walk
+   *  target — walking always faces the direction of travel. */
+  facingTarget?: Vec2 | null;
   groundY?: number;
   onPositionChange: (next: Vec2) => void;
   onTargetReached: () => void;
@@ -44,7 +47,14 @@ export function Npc(props: NpcProps) {
   );
 }
 
-function RiggedNpc({ position, target, groundY = 0, onPositionChange, onTargetReached }: NpcProps) {
+function RiggedNpc({
+  position,
+  target,
+  facingTarget = null,
+  groundY = 0,
+  onPositionChange,
+  onTargetReached,
+}: NpcProps) {
   const group = useRef<Group>(null);
   const gltf = useGLTF(NPC_GLB_URL);
 
@@ -91,7 +101,7 @@ function RiggedNpc({ position, target, groundY = 0, onPositionChange, onTargetRe
 
   const currentClip = useRef<NpcClip>('idle');
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     const { next, reached } = stepTowardTarget(position, target, delta);
     if (next.x !== position.x || next.z !== position.z) {
       onPositionChange(next);
@@ -105,10 +115,22 @@ function RiggedNpc({ position, target, groundY = 0, onPositionChange, onTargetRe
       group.current.position.z = next.z;
       group.current.position.y = groundY + FEET_CLEARANCE;
 
-      // Face direction of travel when walking; preserve last facing on the
-      // arrival frame so we don't snap to a zero-length direction.
+      // Facing priority: walk direction > brain look_at > camera. The camera
+      // fallback keeps the husky engaged with the user during idle moments
+      // instead of stiffly staring at world origin (DWEA-34 review feedback).
       if (target && !reached) {
         const yaw = npcFacingYaw(next, target);
+        if (yaw !== null) {
+          group.current.rotation.y = yaw;
+        }
+      } else if (facingTarget) {
+        const yaw = npcFacingYaw(next, facingTarget);
+        if (yaw !== null) {
+          group.current.rotation.y = yaw;
+        }
+      } else {
+        const cam = state.camera.position;
+        const yaw = npcFacingYaw(next, { x: cam.x, z: cam.z });
         if (yaw !== null) {
           group.current.rotation.y = yaw;
         }
