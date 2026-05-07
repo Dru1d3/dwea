@@ -77,6 +77,36 @@ export const MIXAMO_BONE_NAMES: HumanoidBoneNames = {
   lAnkle: 'mixamorigLeftFoot',
 };
 
+/**
+ * Quaternius "Animated Animal Pack" husky armature. Quadruped — there are no
+ * arm/wrist bones, so the abstract `r*Shoulder/r*Elbow/r*Wrist` slots map onto
+ * the front-leg chain (`FrontShoulder.R` → `FrontUpperLeg.R` → `FrontLowerLeg.R`)
+ * and the wrist slot resolves to `null` because the rig has no foreleg-tip
+ * bone. `createIKControls` skips chains whose joints can't be resolved, so the
+ * `point_at` IK simply no-ops on a quadruped while `look_at` (head/spine) and
+ * locomotion clips work normally. Names match the actual `Object3D.name`
+ * strings that ship in `public/characters/husky-quaternius.glb` — verified
+ * with `@gltf-transform/core` on 2026-05-07; see DWEA-32.
+ */
+export const QUADRUPED_BONE_NAMES: HumanoidBoneNames = {
+  pelvis: 'Back',
+  spine: 'Torso',
+  chest: 'Torso2',
+  head: 'Head',
+  rShoulder: 'FrontShoulder.R',
+  rElbow: 'FrontUpperLeg.R',
+  rWrist: 'FrontLowerLeg.R',
+  lShoulder: 'FrontShoulder.L',
+  lElbow: 'FrontUpperLeg.L',
+  lWrist: 'FrontLowerLeg.L',
+  rHip: 'BackShoulder.R',
+  rKnee: 'BackUpperLeg.R',
+  rAnkle: 'BackLowerLeg.R',
+  lHip: 'BackShoulder.L',
+  lKnee: 'BackUpperLeg.L',
+  lAnkle: 'BackLowerLeg.L',
+};
+
 export interface HumanoidHandle {
   /** Root group `<Character>` wraps as the visual representation. */
   readonly root: Group;

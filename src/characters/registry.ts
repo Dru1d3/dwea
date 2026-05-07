@@ -43,6 +43,31 @@ export type CharacterClip = {
 
 export const characterRegistry: readonly CharacterAsset[] = [
   {
+    id: 'husky-quaternius',
+    label: 'Husky (Quaternius)',
+    source: { kind: 'public', path: 'characters/husky-quaternius.glb' },
+    credit:
+      'Husky 3D model by Quaternius (Tomás Laulhé). CC0 1.0 Universal (public domain). Sourced from poly.pizza Animated Animal Pack (https://poly.pizza/m/wcWiuEqwzq). 49-joint quadruped rig with bundled locomotion clips. See public/characters/husky-quaternius.LICENSE.txt and DWEA-32.',
+    clips: [
+      // Locomotion trio after GltfHumanoid's clip rename (Idle→idle, Walk→walk, Gallop→run).
+      { id: 'idle', label: 'Idle', kind: 'locomotion', loop: true },
+      { id: 'walk', label: 'Walk', kind: 'locomotion', loop: true },
+      { id: 'run', label: 'Run (gallop)', kind: 'locomotion', loop: true },
+      // Extras kept under their original lowercase names — useful for the
+      // LLM motor's `play_animation` once we expose them to the model.
+      { id: 'gallop_jump', label: 'Gallop jump', kind: 'oneshot', loop: false },
+      { id: 'jump_toidle', label: 'Jump-to-idle', kind: 'oneshot', loop: false },
+      { id: 'eating', label: 'Eating', kind: 'gesture', loop: true },
+      { id: 'idle_2', label: 'Idle (alt)', kind: 'locomotion', loop: true },
+      { id: 'idle_2_headlow', label: 'Idle (head low)', kind: 'locomotion', loop: true },
+      { id: 'idle_hitreact_left', label: 'Hit-react left', kind: 'oneshot', loop: false },
+      { id: 'idle_hitreact_right', label: 'Hit-react right', kind: 'oneshot', loop: false },
+      { id: 'attack', label: 'Attack', kind: 'oneshot', loop: false },
+      { id: 'death', label: 'Death', kind: 'oneshot', loop: false },
+    ],
+    defaultClipId: 'idle',
+  },
+  {
     id: 'monkey-tomk',
     label: 'Monkey (tomk)',
     source: { kind: 'public', path: 'characters/monkey-tomk.glb' },
@@ -85,6 +110,13 @@ export const characterRegistry: readonly CharacterAsset[] = [
  * any scene that wants the wider clip set while the monkey carries only the
  * Dance clip in its v1 bake. See ADR 0009 for the asset choice and the
  * single-animation caveat.
+ *
+ * Note (DWEA-32): the runtime rig used by `<Character>` (`GltfHumanoid`) and
+ * by `<Npc>` is currently the husky GLB regardless of this id — both
+ * components still hardcode their URLs. The registry default stays at
+ * `monkey-tomk` to keep the existing T6 behaviour (the LLM `play_animation`
+ * tool still defaults to the monkey's Dance clip) until the registry is
+ * wired into the actual rig load. Track that follow-up against DWEA-25.
  */
 export const defaultCharacterId: CharacterAsset['id'] = 'monkey-tomk';
 
