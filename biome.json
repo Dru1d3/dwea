@@ -7,7 +7,14 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "ignore": ["node_modules", "dist", "build", "coverage", "*.tsbuildinfo"]
+    "ignore": [
+      "node_modules",
+      "dist",
+      "build",
+      "coverage",
+      "*.tsbuildinfo",
+      "src/character/vendor/**"
+    ]
   },
   "formatter": {
     "enabled": true,
