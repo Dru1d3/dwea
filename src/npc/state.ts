@@ -12,10 +12,16 @@ export interface NpcState {
   position: Vec2;
   target: Vec2 | null;
   lastClickTarget: Vec2 | null;
+  /** Non-walking facing target — drives `look_at` from the LLM brain. */
+  facingTarget: Vec2 | null;
+  /** Last brain-requested clip, e.g. "wag" / "sit". `null` when unset. */
+  pendingClip: string | null;
   mode: NpcMode;
   setPosition: (next: Vec2) => void;
   setTarget: (next: Vec2 | null, opts?: { fromUserClick?: boolean }) => void;
   clearTarget: () => void;
+  setFacingTarget: (next: Vec2 | null) => void;
+  setPendingClip: (clip: string | null) => void;
 }
 
 export interface UseNpcStateOptions {
@@ -47,6 +53,8 @@ export function useNpcState(opts: UseNpcStateOptions = {}): NpcState {
   const [position, setPositionState] = useState<Vec2>(initialPosition);
   const [target, setTargetState] = useState<Vec2 | null>(null);
   const [lastClickTarget, setLastClickTarget] = useState<Vec2 | null>(null);
+  const [facingTarget, setFacingTargetState] = useState<Vec2 | null>(null);
+  const [pendingClip, setPendingClipState] = useState<string | null>(null);
 
   const lastUserActivityRef = useRef(performance.now());
   const wanderRadiusRef = useRef(wanderRadius);
@@ -68,6 +76,14 @@ export function useNpcState(opts: UseNpcStateOptions = {}): NpcState {
     setTargetState(null);
   }, []);
 
+  const setFacingTarget = useCallback((next: Vec2 | null) => {
+    setFacingTargetState(next);
+  }, []);
+
+  const setPendingClip = useCallback((clip: string | null) => {
+    setPendingClipState(clip);
+  }, []);
+
   // Reset Mara when the scene identity changes. We track the latest spawn in a
   // ref so the position-reset effect doesn't fire every render of a new object.
   const initialPositionRef = useRef(initialPosition);
@@ -77,6 +93,8 @@ export function useNpcState(opts: UseNpcStateOptions = {}): NpcState {
     setPositionState(initialPositionRef.current);
     setTargetState(null);
     setLastClickTarget(null);
+    setFacingTargetState(null);
+    setPendingClipState(null);
     lastUserActivityRef.current = performance.now();
   }, [sceneKey]);
 
@@ -117,9 +135,13 @@ export function useNpcState(opts: UseNpcStateOptions = {}): NpcState {
     position,
     target,
     lastClickTarget,
+    facingTarget,
+    pendingClip,
     mode,
     setPosition,
     setTarget,
     clearTarget,
+    setFacingTarget,
+    setPendingClip,
   };
 }

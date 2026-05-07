@@ -31,6 +31,9 @@ useGLTF.preload(NPC_GLB_URL);
 export interface NpcProps {
   position: Vec2;
   target: Vec2 | null;
+  /** Optional non-walking facing target. Only honored when there is no walk
+   *  target — walking always faces the direction of travel. */
+  facingTarget?: Vec2 | null;
   groundY?: number;
   onPositionChange: (next: Vec2) => void;
   onTargetReached: () => void;
@@ -44,7 +47,14 @@ export function Npc(props: NpcProps) {
   );
 }
 
-function RiggedNpc({ position, target, groundY = 0, onPositionChange, onTargetReached }: NpcProps) {
+function RiggedNpc({
+  position,
+  target,
+  facingTarget = null,
+  groundY = 0,
+  onPositionChange,
+  onTargetReached,
+}: NpcProps) {
   const group = useRef<Group>(null);
   const gltf = useGLTF(NPC_GLB_URL);
 
@@ -109,6 +119,12 @@ function RiggedNpc({ position, target, groundY = 0, onPositionChange, onTargetRe
       // arrival frame so we don't snap to a zero-length direction.
       if (target && !reached) {
         const yaw = npcFacingYaw(next, target);
+        if (yaw !== null) {
+          group.current.rotation.y = yaw;
+        }
+      } else if (facingTarget) {
+        // No walk in flight — let the LLM brain's look_at steer the head/body.
+        const yaw = npcFacingYaw(next, facingTarget);
         if (yaw !== null) {
           group.current.rotation.y = yaw;
         }

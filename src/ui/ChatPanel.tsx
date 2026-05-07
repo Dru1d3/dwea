@@ -15,9 +15,9 @@ export interface ChatPanelProps {
   messages: readonly ChatMessage[];
   onSend: (text: string) => void;
   onOpenSettings: () => void;
-  /** First-token latency of the most recent assistant turn, in ms. */
-  lastFirstTokenMs: number | null;
-  averageFirstTokenMs: number | null;
+  /** First-audio latency (submit → TTS audible) for the most recent turn, ms. */
+  lastFirstAudioMs: number | null;
+  averageFirstAudioMs: number | null;
   hasApiKey: boolean;
   busy: boolean;
   /** Optional mic capture; if omitted, the mic affordance is hidden. */
@@ -29,8 +29,8 @@ export function ChatPanel(props: ChatPanelProps) {
     messages,
     onSend,
     onOpenSettings,
-    lastFirstTokenMs,
-    averageFirstTokenMs,
+    lastFirstAudioMs,
+    averageFirstAudioMs,
     hasApiKey,
     busy,
     mic,
@@ -79,10 +79,10 @@ export function ChatPanel(props: ChatPanelProps) {
         {hasApiKey ? (
           <>
             <span>
-              first token: {lastFirstTokenMs == null ? '—' : `${Math.round(lastFirstTokenMs)} ms`}
+              first audio: {lastFirstAudioMs == null ? '—' : `${Math.round(lastFirstAudioMs)} ms`}
             </span>
             <span>
-              avg: {averageFirstTokenMs == null ? '—' : `${Math.round(averageFirstTokenMs)} ms`}
+              avg: {averageFirstAudioMs == null ? '—' : `${Math.round(averageFirstAudioMs)} ms`}
             </span>
           </>
         ) : (

@@ -8,10 +8,14 @@ import { Hud } from './Hud.js';
 import { SplatScene } from './SplatScene.js';
 import { Character, type CharacterRef } from './character/Character.js';
 import { createCharacterIntent } from './character/intent.js';
-import type { SceneState } from './llm/openrouter.js';
+import { defaultBible } from './llm/bible.js';
+import type { SceneState } from './llm/brain.js';
 import { loadApiKey, saveApiKey } from './llm/storage.js';
+import { EmotionBadge } from './npc/EmotionBadge.js';
 import { GroundClickPlane } from './npc/GroundClickPlane.js';
 import { Npc } from './npc/Npc.js';
+import { DEFAULT_EMOTION, type EmotionState } from './npc/emotion.js';
+import { createNpcIntent } from './npc/intent.js';
 import { useNpcState } from './npc/state.js';
 import {
   type SplatTransform,
@@ -122,7 +126,32 @@ export function App() {
     [],
   );
 
-  const chat = useChat({ apiKey, getScene });
+  // LLM brain dispatches actions against this surface; bound to Mara's NPC
+  // state via the deps closure. `emotion` is owned by App so the EmotionBadge
+  // and useChat agree on a single source of truth.
+  const [emotion, setEmotion] = useState<EmotionState>(DEFAULT_EMOTION);
+  const emotionRef = useRef<EmotionState>(emotion);
+  emotionRef.current = emotion;
+
+  const npcIntent = useMemo(
+    () =>
+      createNpcIntent({
+        setTarget: (next) => npcRef.current.setTarget(next),
+        setFacingTarget: (next) => npcRef.current.setFacingTarget(next),
+        playClip: (clip) => npcRef.current.setPendingClip(clip),
+        setEmotion,
+        getEmotion: () => emotionRef.current,
+      }),
+    [],
+  );
+
+  const chat = useChat({ apiKey, getScene, intent: npcIntent, bible: defaultBible });
+
+  // Mirror the brain's per-turn emotion into the App-level state so the
+  // EmotionBadge updates without prop-drilling chat through the canvas tree.
+  useEffect(() => {
+    setEmotion(chat.emotion);
+  }, [chat.emotion]);
 
   // Most-recent send fn so the mic hook's stable callback always dispatches
   // through the latest chat instance (busy / history changes don't break it).
@@ -204,9 +233,16 @@ export function App() {
           <Npc
             position={npc.position}
             target={npc.target}
+            facingTarget={npc.facingTarget}
             groundY={navigation.groundY}
             onPositionChange={npc.setPosition}
             onTargetReached={npc.clearTarget}
+          />
+          <EmotionBadge
+            position={npc.position}
+            groundY={navigation.groundY}
+            emotion={emotion}
+            bible={defaultBible}
           />
           <GroundClickPlane
             groundY={navigation.groundY}
@@ -235,8 +271,8 @@ export function App() {
         messages={chat.messages}
         onSend={chat.send}
         onOpenSettings={() => setSettingsOpen(true)}
-        lastFirstTokenMs={chat.lastFirstTokenMs}
-        averageFirstTokenMs={chat.averageFirstTokenMs}
+        lastFirstAudioMs={chat.lastFirstAudioMs}
+        averageFirstAudioMs={chat.averageFirstAudioMs}
         hasApiKey={apiKey.length > 0}
         busy={chat.busy}
         mic={mic}
