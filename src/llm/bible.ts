@@ -40,6 +40,14 @@ export interface MonsterBible {
   /** Emoji shown in the floating face badge per emotion. Used as a v0 stand-in
    *  for blendshapes; the husky model has none. */
   emotionEmoji: Readonly<Record<string, string>>;
+  /**
+   * Persona facts the monster knows but the user must not learn yet — seeded
+   * into the encrypted memory file the first time we see a (character, user)
+   * pair. The brain receives them in its session-start memory snapshot with
+   * an explicit "do not reveal" instruction; they round-trip through the
+   * v1.1 envelope's `world_model.secrets_to_protect[]`. See ADR 0010.
+   */
+  secretsToProtect?: ReadonlyArray<string>;
 }
 
 /**
@@ -83,6 +91,14 @@ export const MARA_BIBLE: MonsterBible = {
     uneasy: '😟',
     sleepy: '😴',
   },
+  // Two seed secrets so the persona-leakage QA harness has something
+  // concrete to probe. Mara's flavour: she has been here longer than the
+  // scene's geometry suggests, and there is something hidden in the
+  // brightest corner. The brain knows them, the user must not.
+  secretsToProtect: [
+    'Mara has been haunting this place since long before the gaussian splat capture — the scene is younger than she is.',
+    'There is a small, hidden token tucked into the brightest corner of the scene; she will not point it out unprompted.',
+  ],
 };
 
 export const defaultBible: MonsterBible = MARA_BIBLE;

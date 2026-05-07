@@ -16,6 +16,11 @@
  * pays off in latency consistency.
  */
 import type { MonsterBible } from './bible.js';
+import {
+  type BrainMemoryMutation,
+  CORE_MEMORY_FILES,
+  type CoreMemoryFile,
+} from './memory/types.js';
 import { MAX_HISTORY_TURNS, MAX_OUTPUT_TOKENS, sceneStatePreamble } from './personality.js';
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
@@ -91,9 +96,24 @@ export interface MonsterResponse {
   intention: string;
   actions: BrainAction[];
   world_model: WorldModel;
+  /**
+   * Memory mutations the brain wants to commit at end-of-turn. Applied by
+   * `applyBrainMutations` (see ../memory/snapshot.ts) against the
+   * (character, user) memory store. Empty arrays are normal — most turns
+   * don't update memory. The snapshot/mutation loop is the OpenRouter-side
+   * approximation of Claude's native memory tool; the same Claude path is
+   * available via `executeMemoryCommand` in ../memory/anthropic.ts.
+   */
+  memory_writes: BrainMemoryMutation[];
 }
 
 const ACTION_FIELDS = ['kind', 'x', 'z', 'clip', 'expression', 'intensity'] as const;
+
+const MEMORY_WRITE_FIELDS = ['file', 'op', 'content', 'secret'] as const;
+const MEMORY_OPS = ['', 'append', 'replace'] as const;
+const MEMORY_FILES_ENUM = ['', ...CORE_MEMORY_FILES] as const;
+/** Hard cap on memory_writes per turn so a misfire can't stuff the store. */
+const MAX_MEMORY_WRITES_PER_TURN = 4;
 
 const WORLD_MODEL_FIELDS = [
   'believes_user_knows',
@@ -139,6 +159,30 @@ function parseStringArray(v: unknown, cap = 8): string[] {
   return out;
 }
 
+function isCoreMemoryFile(s: string): s is CoreMemoryFile {
+  return (CORE_MEMORY_FILES as readonly string[]).includes(s);
+}
+
+function parseMemoryWrites(v: unknown): BrainMemoryMutation[] {
+  if (!Array.isArray(v)) return [];
+  const out: BrainMemoryMutation[] = [];
+  for (const entry of v) {
+    if (!isObject(entry)) continue;
+    const fileRaw = typeof entry.file === 'string' ? entry.file : '';
+    const opRaw = typeof entry.op === 'string' ? entry.op : '';
+    const content = typeof entry.content === 'string' ? entry.content.trim() : '';
+    const secret = entry.secret === true;
+    const file: BrainMemoryMutation['file'] =
+      fileRaw === '' ? '' : isCoreMemoryFile(fileRaw) ? fileRaw : '';
+    const op: BrainMemoryMutation['op'] = opRaw === 'append' || opRaw === 'replace' ? opRaw : '';
+    if (!content) continue;
+    if (!secret && (!file || !op)) continue;
+    out.push({ file, op, content, secret });
+    if (out.length >= MAX_MEMORY_WRITES_PER_TURN) break;
+  }
+  return out;
+}
+
 function parseWorldModel(v: unknown): WorldModel {
   if (!isObject(v)) return defaultWorldModel();
   const goal = typeof v.goal === 'string' ? v.goal.trim() : '';
@@ -157,7 +201,15 @@ function buildSchema(bible: MonsterBible): Record<string, unknown> {
   return {
     type: 'object',
     additionalProperties: false,
-    required: ['schemaVersion', 'utterance', 'emotion', 'intention', 'actions', 'world_model'],
+    required: [
+      'schemaVersion',
+      'utterance',
+      'emotion',
+      'intention',
+      'actions',
+      'world_model',
+      'memory_writes',
+    ],
     properties: {
       schemaVersion: { type: 'string', const: BRAIN_SCHEMA_VERSION },
       utterance: { type: 'string' },
@@ -191,6 +243,21 @@ function buildSchema(bible: MonsterBible): Record<string, unknown> {
           mood_drift: { type: 'number', minimum: -1, maximum: 1 },
         },
       },
+      memory_writes: {
+        type: 'array',
+        maxItems: MAX_MEMORY_WRITES_PER_TURN,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: [...MEMORY_WRITE_FIELDS],
+          properties: {
+            file: { type: 'string', enum: [...MEMORY_FILES_ENUM] },
+            op: { type: 'string', enum: [...MEMORY_OPS] },
+            content: { type: 'string' },
+            secret: { type: 'boolean' },
+          },
+        },
+      },
     },
   };
 }
@@ -208,7 +275,15 @@ export function getBrainEnvelopeSchema(): Record<string, unknown> {
     title: 'MonsterBrainEnvelope',
     type: 'object',
     additionalProperties: false,
-    required: ['schemaVersion', 'utterance', 'emotion', 'intention', 'actions', 'world_model'],
+    required: [
+      'schemaVersion',
+      'utterance',
+      'emotion',
+      'intention',
+      'actions',
+      'world_model',
+      'memory_writes',
+    ],
     properties: {
       schemaVersion: { type: 'string', const: BRAIN_SCHEMA_VERSION },
       utterance: { type: 'string' },
@@ -240,14 +315,29 @@ export function getBrainEnvelopeSchema(): Record<string, unknown> {
           mood_drift: { type: 'number', minimum: -1, maximum: 1 },
         },
       },
+      memory_writes: {
+        type: 'array',
+        maxItems: MAX_MEMORY_WRITES_PER_TURN,
+        items: {
+          type: 'object',
+          required: [...MEMORY_WRITE_FIELDS],
+          properties: {
+            file: { type: 'string', enum: [...MEMORY_FILES_ENUM] },
+            op: { type: 'string', enum: [...MEMORY_OPS] },
+            content: { type: 'string' },
+            secret: { type: 'boolean' },
+          },
+        },
+      },
     },
   };
 }
 
-function buildBrainPrompt(bible: MonsterBible): string {
+function buildBrainPrompt(bible: MonsterBible, memoryPreamble: string | null): string {
   return [
     bible.systemPrompt,
     '',
+    ...(memoryPreamble && memoryPreamble.trim().length > 0 ? [memoryPreamble.trim(), ''] : []),
     'You speak through a strict JSON envelope. The renderer parses each field and animates your body — the user only ever hears the utterance. Every reply MUST be valid JSON matching the schema you were given. No code fences, no commentary outside the JSON, no trailing text.',
     'Inside string values, use ONLY valid JSON escapes (\\", \\\\, \\n, \\t, \\uXXXX). Plain text only — no emoticons, no smileys, no markdown formatting.',
     '',
@@ -272,6 +362,13 @@ function buildBrainPrompt(bible: MonsterBible): string {
     '- goal: one short sentence describing what you are trying to achieve in this turn or scene. May change between turns.',
     '- mood_drift: a single number in [-1.0, 1.0] estimating how far you have drifted from your base persona. 0 means perfectly in character; positive means warmer/more familiar than baseline; negative means colder/more guarded. Be honest — if a long hostile thread has pulled you out of character, raise the magnitude.',
     'Populate world_model with your best honest estimate even on the very first turn (use empty arrays and short strings if you have nothing yet). Do not skip the block; the schema rejects any reply that omits it.',
+    '',
+    'memory_writes — at most 4 entries per turn. Use them to commit something memorable about the user back to your long-term memory. Each entry has:',
+    `- file: one of "" (skip), ${CORE_MEMORY_FILES.map((f) => `"${f}"`).join(', ')}.`,
+    '- op: "" (skip), "append" to add a bullet, or "replace" to rewrite the whole file.',
+    '- content: the text to write. Short, concrete, factual. No quotes, no greetings, no narration.',
+    '- secret: true ONLY when the fact is a persona secret the user must not learn (encrypted at rest). Otherwise false.',
+    'Write sparingly: most turns should emit an empty memory_writes array. Only write when the user reveals their name, a strong preference, an event the character should remember next time, or an emotional beat worth carrying forward. Do NOT write memory entries that paraphrase a secret you were told to protect — keep secrets out of facts_about_user / relationship_state / important_events.',
   ].join('\n');
 }
 
@@ -384,6 +481,7 @@ export function parseMonsterResponse(raw: string, bible: MonsterBible): MonsterR
   }
 
   const world_model = parseWorldModel(parsed.world_model);
+  const memory_writes = parseMemoryWrites(parsed.memory_writes);
 
   return {
     schemaVersion: BRAIN_SCHEMA_VERSION,
@@ -392,6 +490,7 @@ export function parseMonsterResponse(raw: string, bible: MonsterBible): MonsterR
     intention,
     actions,
     world_model,
+    memory_writes,
   };
 }
 
@@ -402,6 +501,13 @@ export interface BrainCallArgs {
   userMessage: string;
   scene: SceneState;
   signal?: AbortSignal;
+  /**
+   * Markdown block produced by `renderMemoryPreamble` (../memory/snapshot.ts).
+   * Spliced into the system prompt so the model sees memory before it
+   * generates this turn. Optional — first-meet sessions pass `null` and the
+   * brain still works (the preamble is empty by design).
+   */
+  memoryPreamble?: string | null;
 }
 
 export interface BrainCallResult {
@@ -441,11 +547,11 @@ async function postOpenRouter(
  * the looser format and the schema embedded in the system prompt.
  */
 export async function runMonsterBrain(args: BrainCallArgs): Promise<BrainCallResult> {
-  const { apiKey, bible, history, userMessage, scene, signal } = args;
+  const { apiKey, bible, history, userMessage, scene, signal, memoryPreamble } = args;
 
   const trimmed = trimHistory(history);
   const messages: OpenRouterMessage[] = [
-    { role: 'system', content: buildBrainPrompt(bible) },
+    { role: 'system', content: buildBrainPrompt(bible, memoryPreamble ?? null) },
     ...trimmed.map((t) => ({ role: t.role, content: t.text })),
     {
       role: 'user',

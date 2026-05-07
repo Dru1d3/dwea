@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type MonsterBible, defaultBible } from '../llm/bible.js';
 import { type ChatTurn, type SceneState, prewarmBrain, runMonsterBrain } from '../llm/brain.js';
+import {
+  type MemoryStore,
+  applyBrainMutations,
+  createBrowserBackend,
+  createMemoryStore,
+  loadMemorySnapshot,
+  renderMemoryPreamble,
+  resolveMemoryIdentity,
+  seedPersonaSecrets,
+} from '../llm/memory/index.js';
 import { pickGreeting } from '../llm/personality.js';
 import { rotateGreetingSeed } from '../llm/storage.js';
 import { type VoiceHandle, createVoice } from '../llm/voice.js';
@@ -23,6 +33,13 @@ export interface UseChatArgs {
   intent?: NpcIntentSurface;
   /** Override the bible at config time; defaults to Mara. */
   bible?: MonsterBible;
+  /**
+   * Inject a custom MemoryStore (Storybook, recall harness, server-render).
+   * Production callers omit it and we lazily build a `createBrowserBackend()`
+   * store keyed on the bible id. Tests pass an in-memory store so they don't
+   * touch IndexedDB.
+   */
+  memoryStore?: MemoryStore;
 }
 
 /**
@@ -62,6 +79,40 @@ export function useChat(args: UseChatArgs) {
     () => createWorldModelLogger({ bibleId: bible.id }),
     [bible.id],
   );
+
+  // Persistent per-(customer, character, user) memory store. The browser
+  // backend is built once per bible swap; tests inject `args.memoryStore`
+  // to bypass IndexedDB entirely. The current memory snapshot (loaded once
+  // per session and refreshed after each turn that wrote anything) is
+  // spliced into the brain's system prompt as a markdown preamble.
+  const store: MemoryStore = useMemo(() => {
+    if (args.memoryStore) return args.memoryStore;
+    const identity = resolveMemoryIdentity(bible.id);
+    return createMemoryStore(createBrowserBackend(), identity);
+  }, [args.memoryStore, bible.id]);
+  const memoryPreambleRef = useRef<string | null>(null);
+
+  // First-load: seed persona secrets, build the snapshot, cache the preamble.
+  // Failures are swallowed — the brain still runs without memory; we just
+  // print a console line so a debugger sees the regression.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        await seedPersonaSecrets(store, bible);
+        const snap = await loadMemorySnapshot(store);
+        if (cancelled) return;
+        memoryPreambleRef.current = renderMemoryPreamble(snap, bible.name);
+      } catch (err) {
+        // eslint-disable-next-line no-console -- intentional: dev visibility.
+        globalThis.console?.warn?.('[memory] init failed', err);
+        memoryPreambleRef.current = null;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [store, bible]);
 
   // Cancel in-flight TTS on unmount so navigating away never leaks a
   // talking voice into the next page.
@@ -122,6 +173,7 @@ export function useChat(args: UseChatArgs) {
           history: priorTurns,
           userMessage: text,
           scene: getScene(),
+          memoryPreamble: memoryPreambleRef.current,
         });
 
         const { response } = result;
@@ -131,6 +183,19 @@ export function useChat(args: UseChatArgs) {
         // throws. driftWarning logs at console.warn for v1 visibility; once
         // the v1.5 QA harness lands it can switch to the structured sink.
         logger.recordTurn(response);
+
+        // Apply this turn's memory mutations and refresh the cached preamble
+        // for the next call. We do this BEFORE TTS so a long utterance can't
+        // race the next user turn into a stale snapshot.
+        if (response.memory_writes.length > 0) {
+          try {
+            await applyBrainMutations(store, response.memory_writes);
+            const snap = await loadMemorySnapshot(store);
+            memoryPreambleRef.current = renderMemoryPreamble(snap, bible.name);
+          } catch (err) {
+            globalThis.console?.warn?.('[memory] write failed', err);
+          }
+        }
 
         // Update transcript first so the user sees text even if TTS fails.
         setMessages((prev) =>
@@ -181,7 +246,7 @@ export function useChat(args: UseChatArgs) {
         setBusy(false);
       }
     },
-    [apiKey, busy, messages, getScene, bible, logger],
+    [apiKey, busy, messages, getScene, bible, logger, store],
   );
 
   // Re-derived each render from the rolling buffer. The reference to
@@ -202,5 +267,11 @@ export function useChat(args: UseChatArgs) {
     averageFirstAudioMs,
     /** Bible the chat is currently bound to. Surface for debug HUDs. */
     bible,
+    /**
+     * Memory store wired into the chat for this (customer, character, user).
+     * Surface so the recall harness and a future debug HUD can `view` /
+     * `clear` memory without going through the chat path.
+     */
+    memoryStore: store,
   };
 }
