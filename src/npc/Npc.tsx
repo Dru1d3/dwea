@@ -1,8 +1,11 @@
 import { useGLTF } from '@react-three/drei';
-import { useFrame } from '@react-three/fiber';
+import { createPortal, useFrame } from '@react-three/fiber';
 import { Suspense, useEffect, useMemo, useRef } from 'react';
-import { type AnimationAction, AnimationMixer, type Group, LoopRepeat } from 'three';
+import { type AnimationAction, AnimationMixer, type Group, LoopRepeat, type Object3D } from 'three';
 import { SkeletonUtils } from 'three-stdlib';
+import type { MonsterBible } from '../llm/bible.js';
+import { EmotionBadge } from './EmotionBadge.js';
+import type { EmotionState } from './emotion.js';
 import { type NpcClip, npcFacingYaw, pickNpcClip, stepTowardTarget } from './movement.js';
 import type { Vec2 } from './types.js';
 
@@ -26,6 +29,34 @@ const NPC_SCALE = 0.5;
 // percentile of gaussians sits a few cm above navigation.groundY.
 const FEET_CLEARANCE = 0.05;
 
+// §5 emotion-badge anchoring (DWEA-66 brief §5, DWEA-70). Bones we probe in
+// preference order — `Head_end` is the leaf above the skull on Quaternius
+// rigs and gives the cleanest "above silhouette" anchor; the others cover
+// the husky `Head` and the future Mara/Mixamo rig conventions. First match
+// wins.
+const HEAD_BONE_NAMES = ['Head_end', 'Head', 'mixamorig:HeadTop_End', 'mixamorig:Head'];
+
+// Badge offset above the head-bone anchor, expressed in BONE-local units
+// (the bone inherits the inner group's NPC_SCALE, so 0.3 here ≈ 0.15 m
+// world for the husky — enough clearance to clear the ear silhouette in
+// idle pose without floating absurdly far above the head).
+const BADGE_HEAD_BONE_OFFSET = 0.3;
+
+// Fallback Y offset when no head bone is addressable. Pre-scale local units
+// inside `<group scale={NPC_SCALE}>` — the husky's rest-pose silhouette top
+// reaches ~3.2 local units (0.5 × 3.2 ≈ 1.6 m world per the NPC_SCALE
+// comment above), and we add ~10 cm world clearance ÷ NPC_SCALE for the
+// §5-mandated gap above the silhouette.
+const BADGE_GROUP_FALLBACK_OFFSET = 3.4;
+
+function findHeadBone(root: Object3D): Object3D | null {
+  for (const name of HEAD_BONE_NAMES) {
+    const bone = root.getObjectByName(name);
+    if (bone) return bone;
+  }
+  return null;
+}
+
 useGLTF.preload(NPC_GLB_URL);
 
 export interface NpcProps {
@@ -35,6 +66,10 @@ export interface NpcProps {
    *  target — walking always faces the direction of travel. */
   facingTarget?: Vec2 | null;
   groundY?: number;
+  /** Current NPC emotion. When provided alongside `bible`, the EmotionBadge
+   *  renders inside the rig subtree (DWEA-70 §5 conformance). */
+  emotion?: EmotionState;
+  bible?: MonsterBible;
   onPositionChange: (next: Vec2) => void;
   onTargetReached: () => void;
 }
@@ -52,6 +87,8 @@ function RiggedNpc({
   target,
   facingTarget = null,
   groundY = 0,
+  emotion,
+  bible,
   onPositionChange,
   onTargetReached,
 }: NpcProps) {
@@ -71,6 +108,12 @@ function RiggedNpc({
     });
     return cloned;
   }, [gltf.scene]);
+
+  // §5 anchor: prefer the head bone for animation-aware tracking, fall back
+  // to the inner group with a constant local-Y if no addressable head bone
+  // ships in this rig (DWEA-70). Memoized on `scene` so the lookup runs once
+  // per cloned skeleton.
+  const headBone = useMemo(() => findHeadBone(scene), [scene]);
 
   // Build the AnimationMixer + idle/walk actions once per cloned scene.
   const animation = useMemo(() => {
@@ -150,9 +193,26 @@ function RiggedNpc({
     animation.mixer.update(delta);
   });
 
+  // Badge mount point: the bone if we found one (best path — follows the
+  // rig through animation and any future GLB swap), else the inner scaled
+  // group as a fallback. `position` on the badge is therefore in PARENT-
+  // local space, not world units — no `groundY + 1.6` literal anywhere.
+  const badge =
+    emotion && bible ? (
+      headBone ? (
+        createPortal(
+          <EmotionBadge offsetY={BADGE_HEAD_BONE_OFFSET} emotion={emotion} bible={bible} />,
+          headBone,
+        )
+      ) : (
+        <EmotionBadge offsetY={BADGE_GROUP_FALLBACK_OFFSET} emotion={emotion} bible={bible} />
+      )
+    ) : null;
+
   return (
     <group ref={group} name="npc-soldier" scale={NPC_SCALE}>
       <primitive object={scene} />
+      {badge}
     </group>
   );
 }

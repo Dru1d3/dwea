@@ -11,7 +11,6 @@ import { createCharacterIntent } from './character/intent.js';
 import { defaultBible } from './llm/bible.js';
 import type { SceneState } from './llm/brain.js';
 import { loadApiKey, saveApiKey } from './llm/storage.js';
-import { EmotionBadge } from './npc/EmotionBadge.js';
 import { GroundClickPlane } from './npc/GroundClickPlane.js';
 import { Npc } from './npc/Npc.js';
 import { DEFAULT_EMOTION, type EmotionState } from './npc/emotion.js';
@@ -235,14 +234,10 @@ export function App() {
             target={npc.target}
             facingTarget={npc.facingTarget}
             groundY={navigation.groundY}
-            onPositionChange={npc.setPosition}
-            onTargetReached={npc.clearTarget}
-          />
-          <EmotionBadge
-            position={npc.position}
-            groundY={navigation.groundY}
             emotion={emotion}
             bible={defaultBible}
+            onPositionChange={npc.setPosition}
+            onTargetReached={npc.clearTarget}
           />
           <GroundClickPlane
             groundY={navigation.groundY}
