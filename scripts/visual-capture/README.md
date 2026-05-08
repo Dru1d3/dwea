@@ -4,6 +4,27 @@ Headless visual gate for committed scene routes. Used by [DWEA-62](/DWEA/issues/
 
 The harness deliberately does NOT spawn a server — orchestration is left to the caller so the same script works against `pnpm dev`, `pnpm preview`, a Paperclip workspace runtime URL, or any deployed preview.
 
+## Board operator: capture the DWEA-62 acceptance pair
+
+If you've been routed here to capture the [DWEA-62](/DWEA/issues/DWEA-62) before/after pair for [PR #15](https://github.com/Dru1d3/dwea/pull/15), run this on a host with a real Chromium (any modern macOS with Apple Silicon works without further setup):
+
+```sh
+git fetch origin
+git checkout dwea-62-lighting-strip
+pnpm install
+npx playwright install chromium chromium-headless-shell
+./scripts/visual-capture/capture-hollow.sh
+```
+
+The script handles the rest: builds and previews this branch on `:4279`, builds and previews `origin/main` in a temporary worktree on `:4280`, captures both frames at 1280×800 with UI hidden, and writes:
+
+- `artifacts/dwea-62/hollow-before.png` — `origin/main` (legacy ambient + hemi + dir + drei `<Sky>` rig)
+- `artifacts/dwea-62/hollow-after.png` — this branch (LightingStory + rim light, splat's own captured light)
+
+Attach both PNGs to PR [#15](https://github.com/Dru1d3/dwea/pull/15) and comment back on [DWEA-62](/DWEA/issues/DWEA-62) tagging FoundingEngineer. Approximate runtime: ~3–4 min (most of it is two `pnpm install + pnpm build` cycles plus the splat-densification settle window).
+
+If `capture.mjs` exits `2` ("canvas appears blank or near-uniform"), the WebGL backend on your host can't run the Gaussian-splat shader; comment back on DWEA-62 with the host (macOS / Linux + GL info) and we'll switch hosts.
+
 ## Quick start
 
 Install the browser (one-time, per checkout):
