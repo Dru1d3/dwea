@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>DWEA · splat-runtime bench (DWEA-55)</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --fg: #e6edf3;
+        --bg: #0d1117;
+        --panel: #161b22cc;
+        --border: #30363d;
+        --accent: #58a6ff;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family:
+          ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        overflow: hidden;
+        height: 100%;
+      }
+      #stage {
+        position: fixed;
+        inset: 0;
+      }
+      #stage canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+      .panel {
+        position: fixed;
+        z-index: 10;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 12px 14px;
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      #status {
+        top: 12px;
+        left: 12px;
+        max-width: 360px;
+      }
+      #results {
+        bottom: 12px;
+        left: 12px;
+        right: 12px;
+        max-height: 50vh;
+        overflow: auto;
+      }
+      #results pre {
+        margin: 8px 0 0;
+        white-space: pre-wrap;
+        word-break: break-all;
+        font-size: 11px;
+      }
+      h1 {
+        font-size: 13px;
+        margin: 0 0 6px;
+        font-weight: 600;
+        color: var(--accent);
+      }
+      .row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .row > span:first-child {
+        opacity: 0.7;
+      }
+      button {
+        background: transparent;
+        color: var(--accent);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 4px 8px;
+        font: inherit;
+        cursor: pointer;
+      }
+      button:hover {
+        background: var(--border);
+      }
+      .err {
+        color: #f85149;
+      }
+      a {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <div id="status" class="panel">
+      <h1>splat-runtime bench · DWEA-55</h1>
+      <div id="status-body">booting…</div>
+    </div>
+    <div id="results" class="panel" hidden>
+      <h1>results</h1>
+      <div id="results-body"></div>
+    </div>
+    <script type="module" src="/src/bench/main.ts"></script>
+  </body>
+</html>
