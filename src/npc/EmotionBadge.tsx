@@ -1,11 +1,15 @@
 import { Html } from '@react-three/drei';
 import type { MonsterBible } from '../llm/bible.js';
 import type { EmotionState } from './emotion.js';
-import type { Vec2 } from './types.js';
 
 interface EmotionBadgeProps {
-  position: Vec2;
-  groundY: number;
+  /**
+   * Local-space Y offset above the parent (head bone or inner rig group).
+   * §5 spec: ~10 cm clearance above the silhouette top in world space —
+   * the caller in Npc.tsx converts that to the parent's local units so this
+   * component never needs to know the rig scale.
+   */
+  offsetY: number;
   emotion: EmotionState;
   bible: MonsterBible;
 }
@@ -15,21 +19,34 @@ interface EmotionBadgeProps {
  * blendshapes — the husky GLB has no morph targets, so the visible face
  * change required by [DWEA-34](/DWEA/issues/DWEA-34) lives in HTML/CSS.
  *
- * Sized in CSS pixels via drei's `<Html distanceFactor>` so it scales with
- * camera distance instead of being a constant pixel size in screen space.
+ * Mounts as a child of the rig (Npc.tsx) — either inside the `Head` bone
+ * (best path, follows animation) or inside the inner scaled `<group>` as a
+ * fallback. The position prop is therefore in PARENT-LOCAL space; world
+ * placement is the parent's responsibility.
+ *
+ * §5 anchoring: the Mara art brief (DWEA-66 §5) specifies "follow-cam-rotation
+ * Y-locked only". We keep drei's `<Html>` in screen-space mode (the default
+ * — no `transform` prop) so the bubble's billboard rotation is locked by
+ * construction. See bible §5.4 (DWEA-54#document-style-bible) for the
+ * silhouette-legibility lens this enforces. Do NOT switch to `transform`
+ * mode without re-deriving a Y-only billboard, or the lock silently breaks.
  */
-export function EmotionBadge({ position, groundY, emotion, bible }: EmotionBadgeProps) {
+export function EmotionBadge({ offsetY, emotion, bible }: EmotionBadgeProps) {
   const emoji = bible.emotionEmoji[emotion.expression] ?? bible.emotionEmoji.neutral ?? '🙂';
   const opacity = 0.55 + Math.min(1, Math.max(0, emotion.intensity)) * 0.45;
 
   return (
     <Html
-      position={[position.x, groundY + 1.6, position.z]}
+      position={[0, offsetY, 0]}
       center
       distanceFactor={6}
       pointerEvents="none"
       style={{ pointerEvents: 'none', userSelect: 'none' }}
     >
+      {/* TODO(DWEA-60-merge): drop the navy pill + cyan border + uppercase
+          label once `palette/amber-halo` lands in the v1 token set. The
+          brief §5 calls for emoji-only (or emoji + opacity-modulated halo);
+          chrome here is a parked carve-out per DWEA-60's UX-chrome rule. */}
       <div
         aria-label={`Mood: ${emotion.expression}`}
         style={{
