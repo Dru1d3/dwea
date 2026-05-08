@@ -8,6 +8,7 @@ import { Hud } from './Hud.js';
 import { SplatScene } from './SplatScene.js';
 import { Character, type CharacterRef } from './character/Character.js';
 import { createCharacterIntent } from './character/intent.js';
+import { getLightingStory } from './lighting/LightingStory.js';
 import { defaultBible } from './llm/bible.js';
 import type { SceneState } from './llm/brain.js';
 import { loadApiKey, saveApiKey } from './llm/storage.js';
@@ -96,6 +97,7 @@ export function App() {
   const transform = resolveTransform(asset);
   const navigation = resolveNavigation(asset);
   const fit = resolveGroundFit(asset);
+  const story = getLightingStory(asset.archetype);
 
   const tuneMode = isTuneModeEnabled();
   const [tuning, setTuning] = useState<Tuning | null>(() =>
@@ -199,7 +201,7 @@ export function App() {
           {/* Soft atmospheric depth — very gentle, kicks in past 60 m so the
               world does not feel boxed-in. */}
           <fog attach="fog" args={['#cfe2f3', 60, 280]} />
-          <Environment groundY={navigation.groundY} />
+          <Environment archetype={asset.archetype} groundY={navigation.groundY} />
           <Suspense fallback={null}>
             <SplatSceneSlot
               src={src}
@@ -237,6 +239,22 @@ export function App() {
             groundY={navigation.groundY}
             onPositionChange={npc.setPosition}
             onTargetReached={npc.clearTarget}
+          />
+          {/* Per-character rim per Visual Style Bible §5.3 — small local
+              light tinted toward the scene's warm/cool dominant so the
+              stylised guest belongs in the place by colour-bias even though
+              it does not match it in surface. Rim follows Mara; intensity is
+              kept small so the splat's own bake stays dominant. */}
+          <pointLight
+            position={[
+              npc.position.x + story.characterRim.offset[0],
+              navigation.groundY + story.characterRim.offset[1],
+              npc.position.z + story.characterRim.offset[2],
+            ]}
+            color={story.characterRim.color}
+            intensity={story.characterRim.intensity}
+            distance={story.characterRim.distance}
+            decay={2}
           />
           <EmotionBadge
             position={npc.position}

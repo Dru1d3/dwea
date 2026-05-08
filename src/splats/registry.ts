@@ -1,3 +1,5 @@
+import type { ArchetypeName } from '../lighting/LightingStory.js';
+
 export type SplatAsset = {
   readonly id: string;
   readonly label: string;
@@ -6,6 +8,13 @@ export type SplatAsset = {
   readonly transform?: SplatTransform;
   readonly navigation?: SplatNavigation;
   readonly groundFit?: SplatGroundFit;
+  /**
+   * Visual Style Bible §4 archetype. Drives lighting story (§5.3) — see
+   * `src/lighting/LightingStory.ts`. Splat-backed scenes (`hollow` / `room` /
+   * `clearing`) ship at their captured hour; the `gallery` carve-out keeps a
+   * studio rig because specimens are not committed archetypes (§4.4).
+   */
+  readonly archetype: ArchetypeName;
 };
 
 /**
@@ -80,6 +89,7 @@ export const splatRegistry: readonly SplatAsset[] = [
   {
     id: 'garden',
     label: 'Garden',
+    archetype: 'hollow',
     source: {
       kind: 'remote',
       url: 'https://huggingface.co/cakewalk/splat-data/resolve/main/garden.splat',
@@ -105,6 +115,7 @@ export const splatRegistry: readonly SplatAsset[] = [
   {
     id: 'treehill',
     label: 'Treehill',
+    archetype: 'clearing',
     source: {
       kind: 'remote',
       url: 'https://huggingface.co/cakewalk/splat-data/resolve/main/treehill.splat',
@@ -128,6 +139,7 @@ export const splatRegistry: readonly SplatAsset[] = [
   {
     id: 'nike',
     label: 'Nike (drei sample)',
+    archetype: 'gallery',
     source: {
       kind: 'remote',
       url: 'https://huggingface.co/cakewalk/splat-data/resolve/main/nike.splat',
@@ -148,6 +160,8 @@ export const splatRegistry: readonly SplatAsset[] = [
   {
     id: 'plush',
     label: 'Plush toy',
+    // Solo specimen object — gallery archetype per §4.4. Keeps studio rig.
+    archetype: 'gallery',
     source: { kind: 'public', path: 'splats/plush.splat' },
     credit:
       'cakewalk/splat-data on Hugging Face — derived from the 3D Gaussian Splatting paper test scenes. Research/demo use; replace before commercial deployment.',
