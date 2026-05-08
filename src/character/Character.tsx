@@ -56,6 +56,12 @@ export interface CharacterRef {
   getHumanoid(): HumanoidHandle | null;
 }
 
+// Visual Style Bible §5.2 carve-out (DWEA-61): these cross-fade windows feed
+// `AnimationAction.fadeIn` / `fadeOut`, which blend *between* two clips that
+// are themselves shaped per §5.2 (`src/visual/curves.ts`). The fade itself
+// can stay linear because it is the blend layer, not the motion shape — the
+// "no linear lerp on character motion" rule applies to the underlying clips
+// and to runtime tweens (use `useCurvedTransition`), not to mixer cross-fades.
 const FAST_FADE = 0.12;
 const SLOW_FADE = 0.35;
 

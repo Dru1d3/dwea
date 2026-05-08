@@ -1,3 +1,4 @@
+import { driftAndSettle } from '../visual/curves.js';
 import type { Vec2 } from './types.js';
 
 export const NPC_WALK_SPEED = 1.5; // world units per second
@@ -49,14 +50,24 @@ export function stepTowardTarget(
 }
 
 /**
- * Vertical idle bob. Decoupled from walk motion so we can stack the two.
- * `baseHeight` defaults to the synthetic-grid scene height; pass a per-scene
- * value (groundY + NPC_FLOAT_OFFSET) for splat scenes with a different ground.
+ * Vertical idle bob — Mara's spirit hover (Visual Style Bible §3.1, §5.2).
+ * Decoupled from walk motion so we can stack the two. `baseHeight` defaults
+ * to the synthetic-grid scene height; pass a per-scene value
+ * (groundY + NPC_FLOAT_OFFSET) for splat scenes with a different ground.
+ *
+ * Bible §5.2 forbids linear lerp on character motion. The bob shape comes
+ * from `driftAndSettle` (slow ease-in-out + low-frequency bob) folded over a
+ * triangle phase so the loop seam at `idleBob(0)` repeats cleanly. This is
+ * the in-runtime proof that §5.2 curves drive shipped motion (DWEA-61).
  */
 export function idleBob(elapsedSeconds: number, baseHeight: number = NPC_BASE_HEIGHT): number {
-  return (
-    baseHeight + Math.sin(elapsedSeconds * NPC_BOB_FREQUENCY * Math.PI * 2) * NPC_BOB_AMPLITUDE
-  );
+  const halfPeriod = 1 / NPC_BOB_FREQUENCY;
+  const triangle = (elapsedSeconds / halfPeriod) % 2;
+  const t = triangle <= 1 ? triangle : 2 - triangle;
+  // driftAndSettle returns 0..1; map symmetrically to ±NPC_BOB_AMPLITUDE so
+  // Mara hovers above and below `baseHeight` instead of only on one side.
+  const offset = (driftAndSettle(t) * 2 - 1) * NPC_BOB_AMPLITUDE;
+  return baseHeight + offset;
 }
 
 export type NpcClip = 'idle' | 'walk';
