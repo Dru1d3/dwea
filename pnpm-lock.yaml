@@ -22,9 +22,15 @@ importers:
       '@react-three/rapier':
         specifier: 1.5.0
         version: 1.5.0(@react-three/fiber@8.18.0(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(three@0.170.0))(react@18.3.1)(three@0.170.0)
+      '@sparkjsdev/spark':
+        specifier: ^2.0.0
+        version: 2.0.0(three@0.170.0)
       ecctrl:
         specifier: 1.0.92
         version: 1.0.92(patch_hash=d8f0d152d910381730bb77a442bdb1743653638e0129da0076fc7aa4ebac8a7f)(@react-three/drei@9.122.0(@react-three/fiber@8.18.0(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(three@0.170.0))(@types/react@18.3.28)(@types/three@0.170.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(three@0.170.0)(use-sync-external-store@1.6.0(react@18.3.1)))(@react-three/fiber@8.18.0(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(three@0.170.0))(@react-three/rapier@1.5.0(@react-three/fiber@8.18.0(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(three@0.170.0))(react@18.3.1)(three@0.170.0))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(three@0.170.0)(use-sync-external-store@1.6.0(react@18.3.1))
+      gsplat:
+        specifier: ^1.2.9
+        version: 1.2.9
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -708,6 +714,11 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@sparkjsdev/spark@2.0.0':
+    resolution: {integrity: sha512-W1p7NM4xXcUAVVcVus2mIFwcAC3VckyE0l4wXJuSmhcOgb6hHpqhQ/Ks9MK9ts7j23K+UwbCBwe+aTc/zgGygw==}
+    peerDependencies:
+      three: ^0.180.0
+
   '@stitches/react@1.2.8':
     resolution: {integrity: sha512-9g9dWI4gsSVe8bNLlb+lMkBYsnIKCZTmvqvDG+Avnn69XfmHZKiaMrx7cgTaddq7aTPPmXiTsbFcUy0xgI4+wA==}
     peerDependencies:
@@ -975,6 +986,9 @@ packages:
 
   glsl-noise@0.0.0:
     resolution: {integrity: sha512-b/ZCF6amfAUb7dJM/MxRs7AetQEahYzJ8PtgfrmEdtw6uyGOr+ZSGtgjFm6mfsBkxJ4d2W7kg+Nlqzqvn3Bc0w==}
+
+  gsplat@1.2.9:
+    resolution: {integrity: sha512-zfpaL9TEQD4oHNesL77KYeRgWvIy2+7P3jRsOA0d8So4Cv/OELRoMXo687ZEXqUMCekiXJgpFw9dz12021NFlw==}
 
   hls.js@1.6.16:
     resolution: {integrity: sha512-VSIRpLfRwlAAdGL4wiTucx2ScRipo0ed1FBatWkyt832jC4CReKstga6yIhYVwGu9LOBjuX9wzmRMeQdBJtzEA==}
@@ -2020,6 +2034,11 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.60.2':
     optional: true
 
+  '@sparkjsdev/spark@2.0.0(three@0.170.0)':
+    dependencies:
+      fflate: 0.8.2
+      three: 0.170.0
+
   '@stitches/react@1.2.8(react@18.3.1)':
     dependencies:
       react: 18.3.1
@@ -2307,6 +2326,8 @@ snapshots:
   get-value@2.0.6: {}
 
   glsl-noise@0.0.0: {}
+
+  gsplat@1.2.9: {}
 
   hls.js@1.6.16: {}
 
