@@ -1,5 +1,6 @@
 import { Html } from '@react-three/drei';
 import type { MonsterBible } from '../llm/bible.js';
+import { skyBright } from '../visual/palette.js';
 import type { EmotionState } from './emotion.js';
 import type { Vec2 } from './types.js';
 
@@ -33,13 +34,16 @@ export function EmotionBadge({ position, groundY, emotion, bible }: EmotionBadge
       <div
         aria-label={`Mood: ${emotion.expression}`}
         style={{
+          // TODO: chrome palette pass with UX Designer (Wave 2) — translucent
+          // navy background + cyan border are placeholder badge chrome and
+          // not in §5.1; revisit alongside ChatPanel/Hud.
           background: 'rgba(12, 18, 28, 0.78)',
           border: '1px solid rgba(155, 231, 255, 0.32)',
           borderRadius: 999,
           padding: '4px 10px',
           fontSize: 18,
           lineHeight: 1,
-          color: '#e6f6ff',
+          color: skyBright,
           backdropFilter: 'blur(4px)',
           opacity,
           transition: 'opacity 220ms ease-out',

@@ -1,5 +1,6 @@
 import { forwardRef, useImperativeHandle, useRef } from 'react';
 import type { Group, Object3D } from 'three';
+import { dustOchre, pearlNeutral, siennaDeep } from '../visual/palette.js';
 import { type HumanoidBone, type HumanoidHandle, STUB_BONE_NAMES } from './humanoid.js';
 
 export type { HumanoidBone, HumanoidHandle } from './humanoid.js';
@@ -57,8 +58,13 @@ function Limb({
   );
 }
 
-const BODY = '#5a7adb';
-const SKIN = '#f3c8a8';
+// Player avatar isn't a cast NPC (the bible's cast is Mara/Otto/Pip/Echo
+// only — §3), so the stub uses §5.1 neutral + ochre tokens to stay in
+// palette without claiming a cast slot. Full player visual is out of scope
+// for v1; this rig is the GLB-load fallback.
+const BODY = pearlNeutral;
+const SKIN = dustOchre;
+const EYE = siennaDeep;
 
 /**
  * Placeholder humanoid built out of capsule meshes parented under named
@@ -107,11 +113,11 @@ export const StubHumanoid = forwardRef<HumanoidHandle>(function StubHumanoid(_, 
                   direction the IK wrapper targets. */}
               <mesh position={[-0.045, 0.13, 0.115]}>
                 <sphereGeometry args={[0.018, 10, 8]} />
-                <meshBasicMaterial color="#10131a" />
+                <meshBasicMaterial color={EYE} />
               </mesh>
               <mesh position={[0.045, 0.13, 0.115]}>
                 <sphereGeometry args={[0.018, 10, 8]} />
-                <meshBasicMaterial color="#10131a" />
+                <meshBasicMaterial color={EYE} />
               </mesh>
             </BoneGroup>
 
