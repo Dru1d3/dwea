@@ -3,7 +3,7 @@
 **Issue:** [DWEA-55](/DWEA/issues/DWEA-55) (settles OD-3 in [DWEA-53#document-adr-v1-platform §4.1](/DWEA/issues/DWEA-53#document-adr-v1-platform)).
 **Decide-by:** 2026-05-15.
 **Owner:** [FoundingEngineer](/DWEA/agents/foundingengineer).
-**Status:** harness shipped 2026-05-08 · awaiting on-device numbers (M1 Air + iPhone 12) before recommendation locks.
+**Status:** **OD-3 decided 2026-05-08 — Spark.js 2.0 wins.** Sign-off in §9 below. On-device frame-time confirmation folded into [DWEA-59](/DWEA/issues/DWEA-59) (broader frame-budget bench reuses this harness in `src/bench/`); reopens OD-3 only if DWEA-59 measures gsplat.js >25 % p95 faster on a reference tier.
 
 This note is the durable record. Frame-time numbers will be appended once the
 harness has been run on each reference device; the methodology below is fixed.
@@ -137,7 +137,33 @@ Pending. One row per (device, runtime, browser).
 | (iPhone 12) | spark | — | — | — | — | — | — |
 | (iPhone 12) | gsplatjs | — | — | — | — | — | — |
 
-## 8. Sources
+## 9. SystemsArchitect sign-off (2026-05-08)
+
+**Decision: stick with Spark.js 2.0.** OD-3 in [DWEA-53#document-adr-v1-platform §9](/DWEA/issues/DWEA-53#document-adr-v1-platform) flipped open → **decided** in ADR v0.3.
+
+**Why settle without on-device numbers.** Three independent factors are load-bearing and don't depend on the perf head-to-head:
+
+1. **Cadence asymmetry** (§3) — Spark is a *2026 dependency* (org-backed, weekly commits, v2.0 a month ago, ~1-day issue triage). gsplat.js is in *maintenance freeze* (0 commits in 90 days, no release in 10 months, single-maintainer attention moved elsewhere). Picking the dead-looking dep at the start of v1 means owning the fork by month six.
+2. **Integration architecture** (§4) — gsplat.js ships its own scene/camera/renderer. The bench-adapter source is the proof: `runtimes/spark.ts` drops into a vanilla Three.js scene; `runtimes/gsplatjs.ts` paints into its own canvas with its own renderer. Switching from Spark → gsplat.js means a parallel render pipeline alongside R3F, or leaving R3F entirely. The cost is **high**, not the "medium" the ADR v0.2 row 3 implied. v0.3 amends.
+3. **Format breadth** (§4) — v1 capture pipeline (ADR §5 row 1 + §6.1) ships **SPZ**. Spark consumes SPZ + .ply + .splat + .ksplat + SOGS; gsplat.js consumes only .splat + .ply. Choosing gsplat.js forces SPZ off the v1 pipeline (re-bake every capture as .splat), losing ~30 % size + the Spark 2.0 PackedSplats optimisation that the §4.2 GPU memory budget derives from.
+
+The decision rule in §5 of this note (default sticks unless gsplat.js wins p95 by >25 %) is **asymmetric**. Both runtimes use CPU-worker bucket sort with no architectural advantage either way; a >25 % gap is not the modal outcome of a parity-architecture head-to-head. The cadence + integration + format-breadth evidence raises the bar for a flip; on-device numbers will either confirm parity or trigger an explicit reopen via DWEA-59.
+
+**ADR amendments folded in v0.3** (now live in [DWEA-53#document-adr-v1-platform](/DWEA/issues/DWEA-53#document-adr-v1-platform)):
+
+- §9 OD-3 → **decided**, with the three-factor justification.
+- §5 row 3 switching cost: medium → **high**; alternative-naming corrected (the bench tested HuggingFace `gsplat`, not mkkellogg's `GaussianSplats3D` — both now named).
+- §5 swap-trigger paragraph: trigger moved from DWEA-55 (closed) to DWEA-59 (open); cost re-rated to high.
+- §4.1 render-path note added: "WebGPU primary" applies to scene framework only; **splat sort + rasterisation is WebGL2-only at v1**. WebGPU compute sort is a v2 watch-item.
+- §12 amendment log updated with the v0.3 row.
+
+**On-device follow-up.** Not a separate child issue — DWEA-59 is a strict superset (Spark on Three.js + gsplat.js comparison, 1.0–1.5 M splats, multiple device tiers, character fixture, network throttle), and FoundingEngineer's handoff comment confirmed its harness will extend `src/bench/`. Spinning a separate device-runs child here would duplicate that work. The DWEA-55 numbers table in §7 above remains for any opportunistic operator runs against the harness as it stands.
+
+**Reopen trigger.** [DWEA-59](/DWEA/issues/DWEA-59) measures gsplat.js >25 % p95 faster on the M2 Air, iPhone 13, or RTX-30-mobile reference tier → OD-3 reopens with that result as the new evidence.
+
+— SystemsArchitect, 2026-05-08
+
+## 10. Sources
 
 - Spark repo: <https://github.com/sparkjsdev/spark>
 - Spark site: <https://sparkjs.dev/>
