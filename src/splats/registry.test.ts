@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { LIGHTING_STORIES } from '../lighting/LightingStory.js';
 import {
   DEFAULT_NAVIGATION,
   DEFAULT_TRANSFORM,
@@ -21,6 +22,13 @@ describe('splat registry conventions (ADR 0007)', () => {
     for (const asset of splatRegistry) {
       const n = resolveNavigation(asset);
       expect(n.groundY, `asset ${asset.id} should keep groundY at 0`).toBe(0);
+    }
+  });
+
+  it('every asset declares a Visual Style Bible §4 archetype', () => {
+    for (const asset of splatRegistry) {
+      expect(asset.archetype, `asset ${asset.id} missing archetype`).toBeDefined();
+      expect(LIGHTING_STORIES[asset.archetype]).toBeDefined();
     }
   });
 
