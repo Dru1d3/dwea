@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { NPC_NAME } from '../llm/personality.js';
+import { iceCool, skyBright } from '../visual/palette.js';
 import { MicButton } from './MicButton.js';
 import type { MicCaptureApi } from './useMicCapture.js';
 
@@ -130,6 +131,12 @@ export function ChatPanel(props: ChatPanelProps) {
   );
 }
 
+// TODO: chrome palette pass with UX Designer (Wave 2) — every translucent
+// rgba below, plus the two leftover solid hex (sendBtn navy on cyan, mic
+// error pink), are placeholder UI chrome. §5.1 only covers solid character
+// / lighting accents, so we do not invent chrome tokens here. Solid chrome
+// hex that mapped cleanly was migrated to palette in this pass; the rest
+// carries through unchanged.
 const panelStyle: React.CSSProperties = {
   position: 'fixed',
   bottom: 16,
@@ -142,7 +149,7 @@ const panelStyle: React.CSSProperties = {
   backdropFilter: 'blur(8px)',
   border: '1px solid rgba(155, 231, 255, 0.18)',
   borderRadius: 12,
-  color: '#e6f6ff',
+  color: skyBright,
   fontSize: 14,
   boxShadow: '0 12px 36px rgba(0,0,0,0.4)',
   zIndex: 10,
@@ -164,7 +171,7 @@ const subtleStyle: React.CSSProperties = {
 const iconBtnStyle: React.CSSProperties = {
   background: 'transparent',
   border: '1px solid rgba(155, 231, 255, 0.25)',
-  color: '#bff3ff',
+  color: skyBright,
   width: 28,
   height: 28,
   borderRadius: 6,
@@ -216,7 +223,7 @@ const metaRowStyle: React.CSSProperties = {
 
 const linkBtnStyle: React.CSSProperties = {
   background: 'transparent',
-  color: '#9be7ff',
+  color: iceCool,
   border: 'none',
   cursor: 'pointer',
   padding: 0,
@@ -236,7 +243,7 @@ const inputStyle: React.CSSProperties = {
   background: 'rgba(0,0,0,0.35)',
   border: '1px solid rgba(155, 231, 255, 0.2)',
   borderRadius: 8,
-  color: '#e6f6ff',
+  color: skyBright,
   padding: '8px 10px',
   outline: 'none',
 };

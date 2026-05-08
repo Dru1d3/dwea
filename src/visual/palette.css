@@ -1,0 +1,17 @@
+/* v1 Visual Style Bible §5.1 master palette — CSS custom-property mirror.
+ *
+ * Source of truth lives in src/visual/palette.ts; the values below MUST
+ * match. Reference these vars from UI chrome via var(--palette-<slug>) so a
+ * reviewer can cite a token name when rejecting a non-compliant colour. */
+:root {
+  --palette-amber-core: #f4d58a;
+  --palette-amber-halo: #ffe9b0;
+  --palette-sienna-deep: #5c3a1e;
+  --palette-moss-deep: #3a4a3f;
+  --palette-dust-ochre: #a38563;
+  --palette-ember-dim: #7a2a1a;
+  --palette-ice-cool: #8fe3f2;
+  --palette-magenta-hot: #f25c8a;
+  --palette-pearl-neutral: #c8c8d0;
+  --palette-sky-bright: #e6f2fb;
+}

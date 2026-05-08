@@ -1,4 +1,5 @@
 import { Grid, Sky } from '@react-three/drei';
+import { dustOchre, pearlNeutral, siennaDeep, skyBright } from './visual/palette.js';
 
 export type EnvironmentProps = {
   /** World Y of the ground plane (metres). Defaults to 0 (clean metric). */
@@ -18,8 +19,10 @@ export function Environment({ groundY = 0 }: EnvironmentProps) {
     <>
       {/* Soft fill so shadowed splats are not pitch black */}
       <ambientLight intensity={0.5} />
-      {/* Sky/ground hemisphere — cool zenith, warm earth bounce */}
-      <hemisphereLight args={['#bcd8ff', '#4a3320', 0.55]} />
+      {/* Sky/ground hemisphere — cool zenith, warm earth bounce. Tokens map
+          §5.1 sky-bright (Clearing slot) and sienna-deep (Mara markings — the
+          warmest dark in palette). */}
+      <hemisphereLight args={[skyBright, siennaDeep, 0.55]} />
       {/* Key light: a 'sun' from a high angle */}
       <directionalLight position={[20, 30, 12]} intensity={1.05} />
 
@@ -43,10 +46,10 @@ export function Environment({ groundY = 0 }: EnvironmentProps) {
         args={[200, 200]}
         cellSize={1}
         cellThickness={0.5}
-        cellColor="#5a6378"
+        cellColor={pearlNeutral}
         sectionSize={10}
         sectionThickness={1.0}
-        sectionColor="#8aa3c4"
+        sectionColor={dustOchre}
         fadeDistance={120}
         fadeStrength={1.2}
         infiniteGrid
