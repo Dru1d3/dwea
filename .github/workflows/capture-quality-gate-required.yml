@@ -1,0 +1,44 @@
+name: capture-quality-gate-required
+
+# Companion to capture-quality-gate.yml.
+#
+# `capture-quality-gate.yml` triggers only on PRs that touch capture paths.
+# Branch protection requires the `Gate self-test (fixtures)` status check;
+# without this companion, PRs that don't touch capture paths would have
+# the required check stuck in "Expected" state and could not merge.
+#
+# This workflow always runs on every PR. When the PR touches capture paths,
+# it skips (the real gate-self-test job in capture-quality-gate.yml will
+# report the required status). When the PR does not touch capture paths,
+# it reports `Gate self-test (fixtures)` as a green skip.
+#
+# Both check runs share the same context name; branch protection only
+# clears the requirement when *all* runs of that context are green.
+
+on:
+  pull_request:
+
+jobs:
+  gate-self-test:
+    name: Gate self-test (fixtures)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Decide whether to skip
+        id: decide
+        run: |
+          set -euo pipefail
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+          if git diff --name-only "$base" "$head" | grep -E '^(captures/|scripts/capture/|docs/capture-protocol/|\.github/workflows/capture-quality-gate(-required)?\.yml$)' >/dev/null; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Capture paths touched — real gate-self-test will run; this companion skips."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "No capture paths touched — passing through."
+          fi
+      - name: Pass-through (no capture paths touched)
+        if: steps.decide.outputs.skip == 'false'
+        run: echo "OK — no capture paths in this PR; gate self-test not applicable."
