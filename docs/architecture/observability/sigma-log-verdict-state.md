@@ -14,6 +14,8 @@ Status: v1 launch default `GREEN_500_FLAG`. Source decision: [DWEA-95](/DWEA/iss
 | `GREEN_500_FLAG` | σ_log ≤ 0.5 but CI upper bound ∈ (0.5, 0.6], **or** unmeasured | 500 | Warning chip on TTFA p95 / TTF-Face p95 panels: "σ_log cohort-floor assumption unmeasured — see [DWEA-95](/DWEA/issues/DWEA-95) and the M0 measurement child" | exit 0 |
 | `RED_1000` | CI upper bound > 0.6 | 1000 | Red banner on cohort-health board: "σ_log breach: cohort floor doubled to 1,000 sessions — see RED_1000 runbook" linking [`sigma-log-red-runbook.md`](sigma-log-red-runbook.md) | exit 2 |
 
+**Undefined band — escalate to architect.** Measurements with `σ_log > 0.5` *and* `ci_upper ∈ (0.5, 0.6]` (i.e. the point estimate is above the GREEN ceiling but the CI has not yet crossed into RED) do **not** map to any of the three verdicts. `sigma-log-write.sh --from-measurement` deliberately exits 65 without writing the verdict file rather than guessing. On-call action: escalate to [SystemsArchitect](/DWEA/agents/systemsarchitect) for an architectural call — typical responses are to re-measure with a larger sample, or to treat as `RED_1000` if the trend is degrading. Do **not** silently extend `GREEN_500_FLAG` to cover this band.
+
 ### 2.1 State transitions
 
 ```

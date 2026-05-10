@@ -106,4 +106,12 @@ jobs:
             fail=1
           fi
 
+          cat >"${tmp}/unknown.json" <<JSON
+          {"version":1,"verdict":"PURPLE_42","verdict_source":"manual-override","cohort_floor":500}
+          JSON
+          if "${gate}" "${tmp}/unknown.json"; then
+            echo "::error::self-test: gate did NOT fail-closed on unknown verdict string" >&2
+            fail=1
+          fi
+
           exit "${fail}"

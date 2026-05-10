@@ -134,13 +134,13 @@
           "legendFormat": "TTFA p95"
         }
       ],
-      "description": "Time to First Audio p95 against the 1.5s budget from ADR §4.4. When verdict is GREEN_500_FLAG the chip panel to the right surfaces the cohort-floor caveat; tooltip → DWEA-95."
+      "description": "Time to First Audio p95 against the 1.5s budget from ADR §4.4. Canonical metric: `dwea_ttfa_seconds_bucket` (Prometheus histogram). When verdict is GREEN_500_FLAG the chip panel to the right surfaces the cohort-floor caveat; tooltip → DWEA-95."
     },
     {
       "type": "stat",
       "title": "σ_log chip — TTFA p95",
       "id": 4,
-      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 4 },
+      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 4 },
       "options": {
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
         "colorMode": "background",
@@ -194,7 +194,7 @@
       "type": "text",
       "title": "TTFA tooltip",
       "id": 5,
-      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 4 },
+      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 8 },
       "options": {
         "mode": "markdown",
         "content": "**TTFA p95 budget:** ≤ 1.5 s (ADR §4.4).\n\nVerdict `$verdict` controls the cohort-floor assumption used to size the canary cohort.\n\nDocs: [verdict state machine](https://github.com/Dru1d3/dwea/blob/main/docs/architecture/observability/sigma-log-verdict-state.md)."
@@ -228,13 +228,13 @@
           "legendFormat": "TTF-Face p95"
         }
       ],
-      "description": "Time to First Face animation p95 against the 2.0s budget from ADR §4.4."
+      "description": "Time to First Face animation p95 against the 2.0s budget from ADR §4.4. Canonical metric: `dwea_ttf_face_seconds_bucket` (Prometheus histogram)."
     },
     {
       "type": "stat",
       "title": "σ_log chip — TTF-Face p95",
       "id": 7,
-      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 12 },
+      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 12 },
       "options": {
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
         "colorMode": "background",
@@ -287,7 +287,7 @@
       "type": "text",
       "title": "TTF-Face tooltip",
       "id": 8,
-      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 12 },
+      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 16 },
       "options": {
         "mode": "markdown",
         "content": "**TTF-Face p95 budget:** ≤ 2.0 s (ADR §4.4).\n\nVerdict `$verdict` controls the cohort-floor assumption used to size the canary cohort."

@@ -28,13 +28,18 @@ truth source for three downstream consumers:
 
 ## Common operations
 
-### Hand-flip the verdict (staging branch)
+### Hand-flip the verdict
 
 ```bash
+git switch -c ops/sigma-log-flip
 docs/architecture/observability/sigma-log-write.sh --manual-override --verdict GREEN_500 --notes "M0 measurement returned σ_log=0.42 CI=[0.30,0.49]"
 git add docs/architecture/observability/sigma_log_verdict.json
 git commit -m "ops: flip σ_log verdict to GREEN_500"
+git push -u origin ops/sigma-log-flip
+gh pr create --fill
 ```
+
+The `m1-launch-gate` workflow's `push` trigger only fires on `main`, but its `pull_request` trigger does run the gate plus the verdict-matrix self-test against any PR that touches the verdict file. Open the flip as a PR so the gate can validate it; the merge to `main` then re-runs the gate canonically.
 
 ### Drive the verdict from a real measurement
 
