@@ -12,15 +12,20 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    container:
+      image: ghcr.io/dru1d3/dwea-ci:latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
+      - name: Configure pnpm store
+        run: pnpm config set store-dir /workspace/.pnpm-store
 
-      - uses: actions/setup-node@v4
+      - uses: actions/cache@v4
         with:
-          node-version: '20'
-          cache: pnpm
+          path: /workspace/.pnpm-store
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-${{ runner.os }}-
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
