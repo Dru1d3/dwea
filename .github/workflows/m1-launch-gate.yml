@@ -1,0 +1,117 @@
+name: m1-launch-gate
+
+# DWEA M1 launch deploy-gate. Fails closed when σ_log verdict is RED_1000 or
+# the verdict file is missing/malformed. Wired to the production-deploy
+# workflow once M1 is live; for now it runs on push to main + PRs that touch
+# the verdict file or the gate script, plus a manual workflow_dispatch.
+#
+# State machine: docs/architecture/observability/sigma-log-verdict-state.md
+# Source decision: DWEA-95 → DWEA-97 → DWEA-99.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/architecture/observability/sigma_log_verdict.json"
+      - "docs/architecture/observability/sigma-log-gate.sh"
+      - "docs/architecture/observability/sigma-log-write.sh"
+      - ".github/workflows/m1-launch-gate.yml"
+  pull_request:
+    paths:
+      - "docs/architecture/observability/sigma_log_verdict.json"
+      - "docs/architecture/observability/sigma-log-gate.sh"
+      - "docs/architecture/observability/sigma-log-write.sh"
+      - ".github/workflows/m1-launch-gate.yml"
+  workflow_dispatch:
+    inputs:
+      verdict_path:
+        description: "Path to the verdict JSON file (defaults to the committed canonical path)."
+        required: false
+        default: ""
+  workflow_call:
+    inputs:
+      verdict_path:
+        description: "Path to the verdict JSON file."
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  group: m1-launch-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: σ_log gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run σ_log gate
+        shell: bash
+        env:
+          INPUT_VERDICT_PATH: ${{ inputs.verdict_path }}
+        run: |
+          set -eu
+          gate=docs/architecture/observability/sigma-log-gate.sh
+          if [[ ! -x "${gate}" ]]; then
+            echo "::error::${gate} is missing or not executable. Did DWEA-97 scaffolding land?" >&2
+            exit 2
+          fi
+          if [[ -n "${INPUT_VERDICT_PATH:-}" ]]; then
+            "${gate}" "${INPUT_VERDICT_PATH}"
+          else
+            "${gate}"
+          fi
+
+      - name: Self-test (verdict matrix)
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -eu
+          gate=docs/architecture/observability/sigma-log-gate.sh
+          tmp="$(mktemp -d)"
+          fail=0
+
+          for v in GREEN_500 GREEN_500_FLAG; do
+            cat >"${tmp}/${v}.json" <<JSON
+          {"version":1,"verdict":"${v}","verdict_source":"manual-override","cohort_floor":500}
+          JSON
+            if ! "${gate}" "${tmp}/${v}.json"; then
+              echo "::error::self-test: gate failed unexpectedly on ${v}" >&2
+              fail=1
+            fi
+          done
+
+          cat >"${tmp}/RED_1000.json" <<JSON
+          {"version":1,"verdict":"RED_1000","verdict_source":"manual-override","cohort_floor":1000}
+          JSON
+          if "${gate}" "${tmp}/RED_1000.json"; then
+            echo "::error::self-test: gate did NOT fail on RED_1000" >&2
+            fail=1
+          fi
+
+          if "${gate}" "${tmp}/missing.json"; then
+            echo "::error::self-test: gate did NOT fail-closed on missing file" >&2
+            fail=1
+          fi
+
+          echo "{not valid json" >"${tmp}/malformed.json"
+          if "${gate}" "${tmp}/malformed.json"; then
+            echo "::error::self-test: gate did NOT fail-closed on malformed file" >&2
+            fail=1
+          fi
+
+          cat >"${tmp}/unknown.json" <<JSON
+          {"version":1,"verdict":"PURPLE_42","verdict_source":"manual-override","cohort_floor":500}
+          JSON
+          if "${gate}" "${tmp}/unknown.json"; then
+            echo "::error::self-test: gate did NOT fail-closed on unknown verdict string" >&2
+            fail=1
+          fi
+
+          exit "${fail}"

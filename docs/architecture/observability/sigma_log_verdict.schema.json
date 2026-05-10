@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Dru1d3/dwea/docs/architecture/observability/sigma_log_verdict.schema.json",
+  "title": "sigma_log verdict",
+  "description": "Verdict file consumed by the M1 launch gate, the cohort-health board, and the TTFA / TTF-Face Grafana panels. Default at v1 launch is GREEN_500_FLAG; M0 measurement (DWEA-95) flips it.",
+  "type": "object",
+  "required": ["version", "verdict", "verdict_source", "cohort_floor"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "verdict": {
+      "type": "string",
+      "enum": ["GREEN_500", "GREEN_500_FLAG", "RED_1000"]
+    },
+    "verdict_source": {
+      "type": "string",
+      "enum": ["default-prudent", "m0-measurement", "manual-override"]
+    },
+    "sigma_log": { "type": ["number", "null"] },
+    "ci_lower": { "type": ["number", "null"] },
+    "ci_upper": { "type": ["number", "null"] },
+    "sample_count": { "type": ["integer", "null"], "minimum": 0 },
+    "measured_at": { "type": ["string", "null"], "format": "date-time" },
+    "cohort_floor": {
+      "type": "integer",
+      "enum": [500, 1000],
+      "description": "500 for GREEN states; 1000 for RED."
+    },
+    "notes": { "type": "string" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "verdict": { "const": "RED_1000" } } },
+      "then": { "properties": { "cohort_floor": { "const": 1000 } } }
+    },
+    {
+      "if": { "properties": { "verdict": { "enum": ["GREEN_500", "GREEN_500_FLAG"] } } },
+      "then": { "properties": { "cohort_floor": { "const": 500 } } }
+    }
+  ]
+}
