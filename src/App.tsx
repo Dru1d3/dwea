@@ -28,6 +28,15 @@ import {
   splatRegistry,
 } from './splats/registry.js';
 import { type Tuning, loadTuning } from './splats/tuningStore.js';
+import {
+  type TelemetryStore,
+  createBrowserBackend,
+  createHttpTransport,
+  createSessionContext,
+  createTelemetry,
+  resolveEndpointFromEnv,
+  withRecentMirror,
+} from './telemetry/index.js';
 import { ChatPanel } from './ui/ChatPanel.js';
 import { SceneTuner } from './ui/SceneTuner.js';
 import { SettingsDialog } from './ui/SettingsDialog.js';
@@ -145,7 +154,21 @@ export function App() {
     [],
   );
 
-  const chat = useChat({ apiKey, getScene, intent: npcIntent, bible: defaultBible });
+  // Telemetry — TTFA / TTF-Face σ_log ingest. One emitter per page session;
+  // the local buffer is the source of record (durable across reloads via
+  // localStorage) and the optional VITE_TELEMETRY_ENDPOINT tees a copy
+  // remote when the operator configures one. See [DWEA-100](/DWEA/issues/DWEA-100).
+  const telemetryStore = useMemo<TelemetryStore>(
+    () => withRecentMirror(createBrowserBackend()),
+    [],
+  );
+  const telemetry = useMemo(() => {
+    const session = createSessionContext();
+    const send = createHttpTransport({ endpoint: resolveEndpointFromEnv() });
+    return createTelemetry({ session, backend: telemetryStore, send });
+  }, [telemetryStore]);
+
+  const chat = useChat({ apiKey, getScene, intent: npcIntent, bible: defaultBible, telemetry });
 
   // Mirror the brain's per-turn emotion into the App-level state so the
   // EmotionBadge updates without prop-drilling chat through the canvas tree.
@@ -157,10 +180,27 @@ export function App() {
   // through the latest chat instance (busy / history changes don't break it).
   const sendRef = useRef(chat.send);
   sendRef.current = chat.send;
+  // Track when the user "finished speaking" via mic. The Web Speech /
+  // Groq STT controllers don't expose a stop callback, so we snapshot
+  // performance.now() the frame the mic state leaves `listening` — that
+  // is the same instant MicButton called mic.stop() on PTT release.
+  const lastMicStopAtRef = useRef<number | null>(null);
   const handleTranscript = useCallback((text: string) => {
-    sendRef.current(text);
+    const stopAt = lastMicStopAtRef.current;
+    lastMicStopAtRef.current = null;
+    sendRef.current(
+      text,
+      stopAt === null ? undefined : { userDoneSpeakingAt: stopAt, inputModality: 'web-speech' },
+    );
   }, []);
   const mic = useMicCapture({ onTranscript: handleTranscript });
+  useEffect(() => {
+    if (mic.state === 'listening') {
+      lastMicStopAtRef.current = null;
+    } else if (lastMicStopAtRef.current === null && mic.state === 'processing') {
+      lastMicStopAtRef.current = performance.now();
+    }
+  }, [mic.state]);
 
   const canTalk = apiKey.length > 0 && !chat.busy;
   usePushToTalkHotkey({
@@ -282,6 +322,7 @@ export function App() {
         initialKey={apiKey}
         onClose={() => setSettingsOpen(false)}
         onSave={handleApiKeySave}
+        telemetryStore={telemetryStore}
       />
     </>
   );
