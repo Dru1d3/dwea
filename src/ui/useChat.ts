@@ -18,6 +18,7 @@ import { type WorldModelLogger, createWorldModelLogger } from '../llm/worldModel
 import type { EmotionState } from '../npc/emotion.js';
 import { DEFAULT_EMOTION } from '../npc/emotion.js';
 import type { NpcIntentSurface } from '../npc/intent.js';
+import type { TelemetryEmitter, TelemetryRecord } from '../telemetry/index.js';
 import type { ChatMessage } from './ChatPanel.js';
 
 const LATENCY_AVERAGE_WINDOW = 5;
@@ -40,6 +41,24 @@ export interface UseChatArgs {
    * touch IndexedDB.
    */
   memoryStore?: MemoryStore;
+  /**
+   * TTFA / TTF-Face emitter — see [src/telemetry](../telemetry/index.ts).
+   * Optional so unrelated tests don't have to spin one up; production wiring
+   * in [App.tsx](../App.tsx) always passes a real emitter.
+   */
+  telemetry?: TelemetryEmitter;
+}
+
+/**
+ * Optional per-turn metadata supplied by the caller. App passes this when the
+ * turn was started by the mic — `userDoneSpeakingAt` is the
+ * `performance.now()` clock at PTT release; `inputModality` reflects the STT
+ * provider. Text-input callers omit it (we treat `send()` time as
+ * "done speaking").
+ */
+export interface SendOptions {
+  userDoneSpeakingAt?: number;
+  inputModality?: TelemetryRecord['inputModality'];
 }
 
 /**
@@ -53,7 +72,7 @@ export interface UseChatArgs {
  *      which steers Mara's body in the scene.
  */
 export function useChat(args: UseChatArgs) {
-  const { apiKey, getScene, intent } = args;
+  const { apiKey, getScene, intent, telemetry } = args;
   const bible = args.bible ?? defaultBible;
 
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
@@ -145,9 +164,18 @@ export function useChat(args: UseChatArgs) {
   const intentRef = useRef<NpcIntentSurface | undefined>(intent);
   intentRef.current = intent;
 
+  const telemetryRef = useRef<TelemetryEmitter | undefined>(telemetry);
+  telemetryRef.current = telemetry;
+
   const send = useCallback(
-    async (text: string) => {
+    async (text: string, options?: SendOptions) => {
       if (!apiKey || busy) return;
+
+      // Capture the "user finished speaking" clock as early as possible so
+      // every downstream branch (busy guard, brain call, TTS) measures
+      // against the same start.
+      const userDoneSpeakingAt = options?.userDoneSpeakingAt ?? performance.now();
+      const inputModality = options?.inputModality ?? 'text';
 
       const userMsg: ChatMessage = { id: uid(), role: 'user', text };
       const assistantId = uid();
@@ -165,6 +193,17 @@ export function useChat(args: UseChatArgs) {
           (m): m is ChatMessage & { role: 'user' | 'assistant' } => !m.pending && m.text.length > 0,
         )
         .map((m) => ({ role: m.role, text: m.text }));
+
+      const turn = telemetryRef.current?.beginTurn({
+        userDoneSpeakingAt,
+        npcId: bible.id,
+        llmProvider: bible.model,
+        // v0 voice is local Web Speech; the surface stays stable for vendor
+        // swap (see voice.ts header). When the swap lands, plumb the vendor
+        // tag through here.
+        ttsProvider: 'web-speech',
+        inputModality,
+      });
 
       try {
         const result = await runMonsterBrain({
@@ -212,6 +251,12 @@ export function useChat(args: UseChatArgs) {
           updatedAt: performance.now(),
         });
 
+        // TTF-Face proxy: until A2F-3D lands we don't have visemes, so the
+        // earliest avatar face change per turn is the EmotionBadge expression
+        // flip we just triggered. Mark on the same tick the brain returned —
+        // the badge re-renders this frame.
+        turn?.markFirstFace();
+
         // Dispatch body actions before we kick off TTS so movement starts
         // visibly in parallel with audio.
         if (intentRef.current) {
@@ -227,6 +272,7 @@ export function useChat(args: UseChatArgs) {
             const buf = recentLatenciesRef.current;
             buf.push(total);
             if (buf.length > LATENCY_AVERAGE_WINDOW) buf.shift();
+            turn?.markFirstAudio();
           },
         });
       } catch (err) {
@@ -242,6 +288,7 @@ export function useChat(args: UseChatArgs) {
               : m,
           ),
         );
+        turn?.abort('brain-error');
       } finally {
         setBusy(false);
       }

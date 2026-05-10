@@ -1,10 +1,18 @@
 import { useEffect, useState } from 'react';
+import type { TelemetryStore } from '../telemetry/index.js';
+import { recordsToCsv } from '../telemetry/index.js';
 
 export interface SettingsDialogProps {
   open: boolean;
   initialKey: string;
   onClose: () => void;
   onSave: (key: string) => void;
+  /**
+   * Optional — when present, the dialog renders a "Download telemetry CSV"
+   * button that exports the local TTFA / TTF-Face buffer (DWEA-100). Tests
+   * can omit it; production wiring in [App.tsx](../App.tsx) always passes.
+   */
+  telemetryStore?: TelemetryStore;
 }
 
 // Mask all but the leading prefix and trailing 4 chars so the user can confirm
@@ -15,14 +23,22 @@ function maskKey(key: string): string {
   return `${key.slice(0, 8)}…${key.slice(-4)}`;
 }
 
-export function SettingsDialog({ open, initialKey, onClose, onSave }: SettingsDialogProps) {
+export function SettingsDialog({
+  open,
+  initialKey,
+  onClose,
+  onSave,
+  telemetryStore,
+}: SettingsDialogProps) {
   const [key, setKey] = useState(initialKey);
   const [reveal, setReveal] = useState(false);
+  const [exportStatus, setExportStatus] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
       setKey(initialKey);
       setReveal(false);
+      setExportStatus(null);
     }
   }, [open, initialKey]);
 
@@ -81,6 +97,51 @@ export function SettingsDialog({ open, initialKey, onClose, onSave }: SettingsDi
             {reveal ? 'Hide' : 'Show'}
           </button>
         </div>
+        {telemetryStore ? (
+          <div style={telemetrySectionStyle}>
+            <h3 style={{ margin: '0 0 6px 0', fontSize: 13 }}>Latency telemetry</h3>
+            <p style={{ margin: '0 0 8px 0', fontSize: 12, opacity: 0.75, lineHeight: 1.4 }}>
+              Per-session TTFA / TTF-Face latencies are stored locally for{' '}
+              <a
+                href="https://github.com/Dru1d3/dwea/issues"
+                target="_blank"
+                rel="noreferrer"
+                style={{ color: '#9be7ff' }}
+              >
+                σ_log dogfood measurement
+              </a>
+              . Download the CSV and hand it to whoever owns DWEA-98 / DWEA-97.
+            </p>
+            <div style={rowStyle}>
+              <button
+                type="button"
+                onClick={() => {
+                  void downloadTelemetryCsv(telemetryStore, setExportStatus);
+                }}
+                style={ghostBtnStyle}
+              >
+                Download CSV
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!confirm('Clear the telemetry buffer? σ_log measurements will be lost.')) {
+                    return;
+                  }
+                  void telemetryStore.clear().then(() => {
+                    setExportStatus('Buffer cleared.');
+                  });
+                }}
+                style={ghostBtnStyle}
+              >
+                Clear
+              </button>
+            </div>
+            {exportStatus ? (
+              <div style={{ marginTop: 6, fontSize: 11, opacity: 0.7 }}>{exportStatus}</div>
+            ) : null}
+          </div>
+        ) : null}
         <div style={rowStyle}>
           <button type="button" onClick={onClose} style={ghostBtnStyle}>
             Cancel
@@ -99,6 +160,33 @@ export function SettingsDialog({ open, initialKey, onClose, onSave }: SettingsDi
       </dialog>
     </div>
   );
+}
+
+async function downloadTelemetryCsv(
+  store: TelemetryStore,
+  setStatus: (s: string | null) => void,
+): Promise<void> {
+  try {
+    const records = await store.list();
+    if (records.length === 0) {
+      setStatus('No telemetry recorded yet — talk to Mara at least once first.');
+      return;
+    }
+    const csv = recordsToCsv(records);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `dwea-telemetry-${new Date().toISOString().replace(/[:.]/g, '-')}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setStatus(`Downloaded ${records.length} session${records.length === 1 ? '' : 's'}.`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    setStatus(`Export failed: ${msg}`);
+  }
 }
 
 const backdropStyle: React.CSSProperties = {
@@ -197,4 +285,12 @@ const primaryBtnStyle: React.CSSProperties = {
   padding: '8px 12px',
   fontWeight: 600,
   cursor: 'pointer',
+};
+
+const telemetrySectionStyle: React.CSSProperties = {
+  marginTop: 12,
+  padding: 10,
+  borderRadius: 8,
+  border: '1px solid rgba(155, 231, 255, 0.18)',
+  background: 'rgba(0,0,0,0.2)',
 };
