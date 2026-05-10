@@ -41,9 +41,11 @@ RUN apt-get update \
         imagemagick \
     && rm -rf /var/lib/apt/lists/*
 
-# Pin pnpm via corepack so it matches packageManager in package.json.
-RUN corepack enable \
-    && corepack prepare pnpm@${PNPM_VERSION} --activate \
+# Install pnpm directly via npm. Bypasses the stale corepack signing keys
+# baked into older Playwright base images, which reject current pnpm releases
+# with "Cannot find matching keyid". Update PNPM_VERSION to follow the
+# packageManager field in package.json.
+RUN npm install --global --no-fund --no-audit pnpm@${PNPM_VERSION} \
     && pnpm --version
 
 # §1 capture-pipeline binaries (Brush 0.3 + gsbox SPZ 4) install at workflow
