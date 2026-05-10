@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dwea.example/schemas/capture.schema.json",
+  "title": "DWEA capture sidecar (capture.json)",
+  "description": "Sidecar metadata for a single board-operator capture. v1 of the protocol — see docs/capture-protocol/v1.md.",
+  "type": "object",
+  "required": [
+    "protocolVersion",
+    "sceneId",
+    "captureVersion",
+    "capturedAt",
+    "hourOfDay",
+    "lighting",
+    "device",
+    "frames",
+    "rings",
+    "operator"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "protocolVersion": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+$",
+      "description": "Capture protocol version. Must start with 1. for v1 captures."
+    },
+    "sceneId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$",
+      "description": "Scene slug. Lowercase, hyphens only."
+    },
+    "sceneFamilyId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$",
+      "description": "Optional. Group of sibling captures of the same physical place at different hours-of-day."
+    },
+    "captureVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Bumps on every re-shoot. CI grades the highest version found."
+    },
+    "capturedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 with timezone. Required so hourOfDay is unambiguous."
+    },
+    "hourOfDay": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 23,
+      "description": "Local hour at the capture location. Should match capturedAt's local hour."
+    },
+    "lighting": {
+      "type": "string",
+      "enum": [
+        "soft-daylight",
+        "hard-noon",
+        "golden-hour",
+        "blue-hour",
+        "indoor-mixed",
+        "indoor-controlled",
+        "overcast",
+        "twilight",
+        "night-artificial"
+      ],
+      "description": "Lighting category. Used by Realism Bar sibling-capture grouping."
+    },
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lat": { "type": "number", "minimum": -90, "maximum": 90 },
+        "lng": { "type": "number", "minimum": -180, "maximum": 180 }
+      },
+      "required": ["lat", "lng"]
+    },
+    "device": {
+      "type": "object",
+      "required": ["kind"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["phone", "dslr", "mirrorless", "action-cam", "other"]
+        },
+        "make": { "type": "string", "minLength": 1 },
+        "model": { "type": "string", "minLength": 1 },
+        "lensFocalMm35": {
+          "type": "number",
+          "minimum": 8,
+          "maximum": 300,
+          "description": "35-mm-equivalent focal length. Helps SfM bootstrap."
+        }
+      }
+    },
+    "frames": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "count"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "stills" },
+            "count": { "type": "integer", "minimum": 30 },
+            "format": { "type": "string", "enum": ["jpeg", "heic", "png", "raw"] },
+            "resolution": {
+              "type": "array",
+              "items": { "type": "integer", "minimum": 720 },
+              "minItems": 2,
+              "maxItems": 2
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "fps", "durationSec"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "video" },
+            "path": { "type": "string", "minLength": 1 },
+            "fps": { "type": "number", "enum": [24, 25, 30, 50, 60] },
+            "durationSec": { "type": "number", "minimum": 10, "maximum": 180 },
+            "resolution": {
+              "type": "array",
+              "items": { "type": "integer", "minimum": 1080 },
+              "minItems": 2,
+              "maxItems": 2
+            }
+          }
+        }
+      ]
+    },
+    "rings": {
+      "type": "integer",
+      "minimum": 2,
+      "maximum": 5,
+      "description": "Number of elevation rings walked. v1 protocol calls for 3."
+    },
+    "overlapTarget": {
+      "type": "number",
+      "minimum": 0.5,
+      "maximum": 0.95,
+      "description": "Operator-declared overlap fraction between consecutive frames. v1 protocol calls for 0.6–0.8."
+    },
+    "operator": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifier for the human who shot the capture. Email, username, or initials."
+    },
+    "notes": { "type": "string" }
+  }
+}

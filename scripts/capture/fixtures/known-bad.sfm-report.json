@@ -1,0 +1,11 @@
+{
+  "frames_total": 64,
+  "frames_registered": 47,
+  "rings_detected": 2,
+  "sharpness_mean": 38.4,
+  "luma_mean": 92.5,
+  "lighting_drift": 0.06,
+  "max_orbit_gap_deg": 38.7,
+  "motion_in_scene": false,
+  "_note": "Synthetic fixture for CI red-path. Models a too-fast handheld two-ring capture: 73% registration (below the 95% bar), an orbit gap, blurry frames, sparse coverage. Should fail with LOW_REGISTRATION + SPARSE_COVERAGE + LOW_OVERLAP_REGION + BLURRY_FRAMES."
+}
