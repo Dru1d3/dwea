@@ -1,0 +1,99 @@
+name: visual-gate
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: visual-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: ghcr.io/dru1d3/dwea-ci:latest
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure pnpm store
+        run: pnpm config set store-dir /workspace/.pnpm-store
+
+      - uses: actions/cache@v4
+        with:
+          path: /workspace/.pnpm-store
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-${{ runner.os }}-
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build app
+        run: pnpm build
+
+      - name: Headless Chromium smoke + screenshot
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          # Install the Playwright npm package against the browsers already
+          # baked into the image (PLAYWRIGHT_BROWSERS_PATH=/ms-playwright +
+          # PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 from the Dockerfile means this
+          # is a JS-only install). Avoids polluting package.json until the
+          # real visual-gate harness lands.
+          mkdir -p /tmp/vg-deps
+          (cd /tmp/vg-deps && npm init -y >/dev/null \
+            && npm install --silent --no-audit --no-fund playwright@1.49)
+          export NODE_PATH=/tmp/vg-deps/node_modules
+          node - <<'JS'
+          const { chromium } = require('playwright');
+          const handler = require('http').createServer((req, res) => {
+            const fs = require('fs');
+            const path = require('path');
+            const safe = path.normalize(req.url.split('?')[0]).replace(/^\/+/, '');
+            const target = safe === '' ? 'index.html' : safe;
+            const file = path.join(process.cwd(), 'dist', target);
+            fs.readFile(file, (err, data) => {
+              if (err) { res.statusCode = 404; return res.end('not found'); }
+              const ext = path.extname(file).toLowerCase();
+              const types = {
+                '.html': 'text/html',
+                '.js': 'application/javascript',
+                '.css': 'text/css',
+                '.json': 'application/json',
+                '.svg': 'image/svg+xml',
+                '.png': 'image/png',
+                '.jpg': 'image/jpeg',
+              };
+              res.setHeader('content-type', types[ext] || 'application/octet-stream');
+              res.end(data);
+            });
+          });
+          (async () => {
+            await new Promise((resolve) => handler.listen(4173, resolve));
+            const browser = await chromium.launch();
+            const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+            const errors = [];
+            page.on('pageerror', (err) => errors.push(String(err)));
+            await page.goto('http://127.0.0.1:4173/', { waitUntil: 'load', timeout: 30000 });
+            await page.waitForTimeout(2000);
+            await page.screenshot({ path: 'artifacts/home.png', fullPage: false });
+            await browser.close();
+            handler.close();
+            if (errors.length) {
+              console.warn('page errors observed (non-fatal in smoke):', errors);
+            }
+            console.log('visual-gate smoke ok');
+          })().catch((err) => { console.error(err); process.exit(1); });
+          JS
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: visual-gate-smoke
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 14
