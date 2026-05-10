@@ -1,0 +1,99 @@
+name: capture-quality-gate
+
+on:
+  pull_request:
+    paths:
+      - "captures/**"
+      - "scripts/capture/**"
+      - "docs/capture-protocol/**"
+      - ".github/workflows/capture-quality-gate.yml"
+  workflow_dispatch:
+    inputs:
+      capture_path:
+        description: "captures/<sceneId>/v<n>/ to grade"
+        required: false
+        default: ""
+
+jobs:
+  gate-self-test:
+    # Always-on: proves the gate logic itself is healthy before we trust
+    # it on a real capture. Green-on-good + red-on-bad fixture suite.
+    name: Gate self-test (fixtures)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run fixture suite
+        run: bash scripts/capture/test_quality_gate.sh
+
+  grade-changed-captures:
+    # Runs only on PRs that touch captures/. Pulls the dwea-ci image
+    # (Brush 0.3 + glomap), grades every changed capture dir, posts the
+    # operator message + JSON report as the PR check output.
+    name: Grade changed captures
+    runs-on: ubuntu-latest
+    needs: gate-self-test
+    if: github.event_name == 'pull_request'
+    container:
+      image: ghcr.io/dru1d3/dwea-ci:latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect changed capture directories
+        id: detect
+        run: |
+          set -euo pipefail
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+          dirs="$(git diff --name-only "$base" "$head" \
+            | awk -F/ '/^captures\//{print $1"/"$2"/"$3}' | sort -u)"
+          {
+            echo "dirs<<EOF"
+            echo "$dirs"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+      - name: Run quality gate
+        if: steps.detect.outputs.dirs != ''
+        run: |
+          set -euo pipefail
+          fail=0
+          while IFS= read -r d; do
+            [[ -z "$d" ]] && continue
+            echo "::group::Grading $d"
+            mkdir -p "_gate-out/$d"
+            if ! python3 scripts/capture/quality-gate.py \
+                  --capture-dir "$d" \
+                  --output-json "_gate-out/$d/gate.json"; then
+              fail=1
+            fi
+            cat "_gate-out/$d/gate.json"
+            echo "::endgroup::"
+          done <<< "${{ steps.detect.outputs.dirs }}"
+          exit "$fail"
+      - name: Upload gate reports
+        if: always() && steps.detect.outputs.dirs != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: capture-gate-reports
+          path: _gate-out/
+
+  grade-on-demand:
+    name: Grade on-demand capture
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.capture_path != ''
+    container:
+      image: ghcr.io/dru1d3/dwea-ci:latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python3 scripts/capture/quality-gate.py \
+            --capture-dir "${{ github.event.inputs.capture_path }}" \
+            --output-json _gate-out/gate.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: capture-gate-report
+          path: _gate-out/

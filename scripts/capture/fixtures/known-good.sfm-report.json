@@ -1,0 +1,11 @@
+{
+  "frames_total": 108,
+  "frames_registered": 108,
+  "rings_detected": 3,
+  "sharpness_mean": 142.5,
+  "luma_mean": 88.1,
+  "lighting_drift": 0.04,
+  "max_orbit_gap_deg": 11.3,
+  "motion_in_scene": false,
+  "_note": "Synthetic fixture for CI green-path. Models a clean three-ring 360 capture with no operator faults. Real reports come from glomap / brush sfm via scripts/capture/quality-gate.py."
+}
