@@ -1,0 +1,13 @@
+{
+  "$schema": "./sigma_log_verdict.schema.json",
+  "version": 1,
+  "verdict": "GREEN_500_FLAG",
+  "verdict_source": "default-prudent",
+  "sigma_log": null,
+  "ci_lower": null,
+  "ci_upper": null,
+  "sample_count": null,
+  "measured_at": null,
+  "cohort_floor": 500,
+  "notes": "v1 launch default per DWEA-95 / DWEA-97 (CEO Path 1 — pre-emptive prudence). The cohort-floor assumption (500 sessions) is unmeasured at v1 cut. Switch to GREEN_500 only when a real M0 measurement returns sigma_log <= 0.5 with CI upper bound also <= 0.5; switch to RED_1000 if CI upper bound crosses 0.6."
+}
