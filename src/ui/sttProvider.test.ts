@@ -36,4 +36,57 @@ describe('resolveSttConfig', () => {
     expect(cfg.provider).toBe('groq');
     expect(cfg.language).toBe('de');
   });
+
+  describe('user settings overlay (DWEA-36)', () => {
+    it('user engine=web-speech wins over env Groq key', () => {
+      const cfg = resolveSttConfig({ VITE_GROQ_API_KEY: 'gsk-env' }, { engine: 'web-speech' });
+      expect(cfg.provider).toBe('web-speech');
+      expect(cfg.reason).toContain('user setting');
+    });
+
+    it('user engine=groq with env key resolves to Groq using the env key', () => {
+      const cfg = resolveSttConfig({ VITE_GROQ_API_KEY: 'gsk-env' }, { engine: 'groq' });
+      expect(cfg.provider).toBe('groq');
+      expect(cfg.groqApiKey).toBe('gsk-env');
+      expect(cfg.reason).toMatch(/env key/);
+    });
+
+    it('user engine=groq with user-supplied key prefers the user key over env', () => {
+      const cfg = resolveSttConfig(
+        { VITE_GROQ_API_KEY: 'gsk-env' },
+        { engine: 'groq', groqApiKey: 'gsk-user' },
+      );
+      expect(cfg.provider).toBe('groq');
+      expect(cfg.groqApiKey).toBe('gsk-user');
+      expect(cfg.reason).toMatch(/user-supplied/);
+    });
+
+    it('user engine=groq with no key anywhere falls back to web-speech', () => {
+      const cfg = resolveSttConfig({}, { engine: 'groq' });
+      expect(cfg.provider).toBe('web-speech');
+      expect(cfg.reason).toMatch(/falling back/);
+    });
+
+    it('user engine null defers to env resolution', () => {
+      const cfg = resolveSttConfig({ VITE_GROQ_API_KEY: 'gsk-env' }, { engine: null });
+      expect(cfg.provider).toBe('groq');
+      expect(cfg.reason).toMatch(/VITE_GROQ_API_KEY/);
+    });
+
+    it('user-supplied Groq key auto-selects Groq with no env key', () => {
+      const cfg = resolveSttConfig({}, { groqApiKey: 'gsk-user' });
+      expect(cfg.provider).toBe('groq');
+      expect(cfg.groqApiKey).toBe('gsk-user');
+      expect(cfg.reason).toMatch(/user-supplied/);
+    });
+
+    it('forwards env language hint even when user picked Groq', () => {
+      const cfg = resolveSttConfig(
+        { VITE_GROQ_API_KEY: 'gsk-env', VITE_STT_LANGUAGE: 'de' },
+        { engine: 'groq' },
+      );
+      expect(cfg.provider).toBe('groq');
+      expect(cfg.language).toBe('de');
+    });
+  });
 });
