@@ -5,7 +5,10 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { CameraRig } from './CameraRig.js';
 import { Environment } from './Environment.js';
 import { Hud } from './Hud.js';
+import { SparkSplatScene } from './SparkSplatScene.js';
 import { SplatScene } from './SplatScene.js';
+import { BenchOverlay, BenchOverlayInsideCanvas } from './bench/spark/BenchOverlay.js';
+import { FrameSampler } from './bench/spark/perf.js';
 import { Character, type CharacterRef } from './character/Character.js';
 import { createCharacterIntent } from './character/intent.js';
 import { defaultBible } from './llm/bible.js';
@@ -64,6 +67,27 @@ function isTuneModeEnabled(): boolean {
   return new URLSearchParams(window.location.search).has('tune');
 }
 
+/**
+ * Bench-mode flags read from `?…` once on mount. Leaves the v0 drei `<Splat>`
+ * path untouched when no flag is set. See [DWEA-111](/DWEA/issues/DWEA-111).
+ */
+type BenchFlags = {
+  readonly renderer: 'drei' | 'spark';
+  readonly bench: boolean;
+  readonly splatUrlOverride: string | null;
+};
+
+function readBenchFlags(): BenchFlags {
+  if (typeof window === 'undefined') {
+    return { renderer: 'drei', bench: false, splatUrlOverride: null };
+  }
+  const q = new URLSearchParams(window.location.search);
+  const renderer = q.get('renderer') === 'spark' ? 'spark' : 'drei';
+  const bench = q.get('bench') === 'spark';
+  const splatUrlOverride = q.get('splatUrl');
+  return { renderer, bench, splatUrlOverride };
+}
+
 function readSceneIdFromHash(): string {
   const raw = window.location.hash.replace(/^#\/?/, '').trim();
   return raw.length > 0 ? raw : defaultSplatId;
@@ -92,10 +116,62 @@ export function App() {
     throw new Error(`Splat registry has no entry for "${defaultSplatId}".`);
   }
 
-  const src = resolveSplatUrl(asset, import.meta.env.BASE_URL);
+  const benchFlags = useMemo(() => readBenchFlags(), []);
+  const registrySrc = resolveSplatUrl(asset, import.meta.env.BASE_URL);
+  const src = benchFlags.splatUrlOverride ?? registrySrc;
   const transform = resolveTransform(asset);
   const navigation = resolveNavigation(asset);
   const fit = resolveGroundFit(asset);
+
+  // Bench harness state — only meaningful when ?bench=spark. Marks the moment
+  // SplatMesh.onLoad fires, the moment Spark first contributes pixels, and
+  // the moment both splat + monster are visible together. The BenchOverlay
+  // owns the recording window, percentile math, and JSON publication.
+  const [benchSplatLoadedMs, setBenchSplatLoadedMs] = useState<number | null>(null);
+  const [benchFirstSplatFrameMs, setBenchFirstSplatFrameMs] = useState<number | null>(null);
+  const [benchBothVisibleMs, setBenchBothVisibleMs] = useState<number | null>(null);
+  const [benchNumSplats, setBenchNumSplats] = useState<number | null>(null);
+  const [benchBytesOnTheWire, setBenchBytesOnTheWire] = useState<number | null>(null);
+
+  // Probe Content-Length once per src — Spark.js fetches the asset itself, so
+  // we run a parallel HEAD to log "wire bytes" without blocking the render.
+  useEffect(() => {
+    if (!benchFlags.bench) return;
+    let cancelled = false;
+    setBenchBytesOnTheWire(null);
+    fetch(src, { method: 'HEAD' })
+      .then((res) => {
+        const len = res.headers.get('content-length');
+        if (!cancelled && len != null) setBenchBytesOnTheWire(Number(len));
+      })
+      .catch(() => {
+        // HEAD failures are informational only; bench numbers still ship.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [benchFlags.bench, src]);
+
+  const handleSparkLoaded = useCallback(({ numSplats }: { numSplats: number; src: string }) => {
+    setBenchNumSplats(numSplats);
+    const t = performance.now();
+    setBenchSplatLoadedMs((prev) => prev ?? t);
+  }, []);
+
+  const handleSparkFirstFrame = useCallback(() => {
+    const t = performance.now();
+    setBenchFirstSplatFrameMs((prev) => prev ?? t);
+  }, []);
+
+  // Bench sampler is shared by App and BenchOverlay — App owns the lifecycle
+  // (one-per-mount), BenchOverlay drains it.
+  const benchSampler = useMemo(() => new FrameSampler(), []);
+  const handleBenchSample = useCallback(
+    (deltaMs: number, ts: number) => {
+      benchSampler.recordFrame(deltaMs, ts);
+    },
+    [benchSampler],
+  );
 
   const tuneMode = isTuneModeEnabled();
   const [tuning, setTuning] = useState<Tuning | null>(() =>
@@ -174,6 +250,15 @@ export function App() {
     setApiKey(next);
   }, []);
 
+  // The v0 monster (Npc) mounts unconditionally on first paint, so once Spark
+  // contributes its first splat frame, both subjects are visible. Mirror the
+  // first-splat mark into bothVisible for the bench harness's TTFA accounting.
+  useEffect(() => {
+    if (!benchFlags.bench) return;
+    if (benchFirstSplatFrameMs == null) return;
+    setBenchBothVisibleMs((prev) => prev ?? benchFirstSplatFrameMs);
+  }, [benchFlags.bench, benchFirstSplatFrameMs]);
+
   // T2 — character + physics rig. The ref is read by the intent surface so
   // T3 can dispatch tool calls into it from anywhere outside R3F's render
   // tree. Spawn slightly inside the splat scene with a touch of clearance
@@ -201,15 +286,29 @@ export function App() {
           <fog attach="fog" args={['#cfe2f3', 60, 280]} />
           <Environment groundY={navigation.groundY} />
           <Suspense fallback={null}>
-            <SplatSceneSlot
-              src={src}
-              transform={transform}
-              groundFit={
-                fit ? { groundY: navigation.groundY, percentile: fit.percentile } : undefined
-              }
-              tuning={tuning}
-            />
+            {benchFlags.renderer === 'spark' || benchFlags.bench ? (
+              benchFlags.bench ? (
+                <SparkSplatScene
+                  src={src}
+                  transform={transform}
+                  onLoaded={handleSparkLoaded}
+                  onFirstSplatFrame={handleSparkFirstFrame}
+                />
+              ) : (
+                <SparkSplatScene src={src} transform={transform} />
+              )
+            ) : (
+              <SplatSceneSlot
+                src={src}
+                transform={transform}
+                groundFit={
+                  fit ? { groundY: navigation.groundY, percentile: fit.percentile } : undefined
+                }
+                tuning={tuning}
+              />
+            )}
           </Suspense>
+          {benchFlags.bench ? <BenchOverlayInsideCanvas onSample={handleBenchSample} /> : null}
           {/* Rapier physics live under <Suspense> so the WASM init kicks in
               after first paint without blocking the splat scene. */}
           <Suspense fallback={null}>
@@ -255,6 +354,17 @@ export function App() {
       </KeyboardControls>
       <Hud />
       <SceneSwitcher currentId={asset.id} />
+      {benchFlags.bench ? (
+        <BenchOverlay
+          sampler={benchSampler}
+          assetUrl={src}
+          numSplats={benchNumSplats}
+          bytesOnTheWire={benchBytesOnTheWire}
+          splatLoadedMs={benchSplatLoadedMs}
+          firstSplatFrameMs={benchFirstSplatFrameMs}
+          bothVisibleMs={benchBothVisibleMs}
+        />
+      ) : null}
       {tuneMode ? (
         <SceneTuner
           assetId={asset.id}
