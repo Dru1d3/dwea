@@ -1,0 +1,67 @@
+# A2F-3D NIM + WS relay (Spike B / DWEA-118)
+#
+# Stands up the NVIDIA Audio2Face-3D microservice on an L4 (or any
+# CUDA-capable GPU) plus a thin WebSocket relay so the browser test page
+# (`/?lipsync-test`) can speak to the gRPC service.
+#
+# Not for production: spike-only access-reality check.
+#
+# Prereqs (operator):
+#   - Host with NVIDIA Container Toolkit installed
+#     <https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html>
+#   - NGC API key with NIM access — `docker login nvcr.io` (username `$oauthtoken`).
+#   - L4 (24 GB) or better; A100/H100 work and are useful for the
+#     concurrency-scaling part of the spike.
+#
+# Bring up:
+#   NGC_API_KEY=... docker compose -f infra/a2f-3d/compose.yaml up
+#
+# The relay listens on 0.0.0.0:7890 by default — matches the
+# `DEFAULT_RELAY_URL` in `src/lipsync/TestPage.tsx`.
+
+services:
+  a2f-3d-nim:
+    # Pin a specific image digest before any benchmark numbers leave this
+    # repo. The `:latest` tag below is a placeholder so the relay's gRPC
+    # client knows where to dial.
+    image: nvcr.io/nim/nvidia/audio2face-3d:latest
+    container_name: dwea-a2f3d-nim
+    environment:
+      NGC_API_KEY: ${NGC_API_KEY:?set NGC_API_KEY before docker compose up}
+      # `production` mapping keeps the ARKit-52 channel order canonical.
+      A2F_OUTPUT_MAPPING: arkit52
+    ports:
+      - "50051:50051" # gRPC
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    shm_size: 2gb
+    healthcheck:
+      test: ["CMD", "/usr/bin/grpc_health_probe", "-addr=:50051"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  relay:
+    image: node:20-alpine
+    container_name: dwea-a2f3d-relay
+    working_dir: /relay
+    volumes:
+      - ./relay:/relay:ro
+    command: ["node", "/relay/index.mjs"]
+    environment:
+      A2F_GRPC_ADDR: a2f-3d-nim:50051
+      RELAY_PORT: "7890"
+      # Spike-only metric labels — flow into the four named metrics on the
+      # browser side via the WS protocol's `frame.audioTimeMs` field. The
+      # relay itself doesn't compute the metrics.
+      ENGINE_ID: a2f3d
+    ports:
+      - "7890:7890"
+    depends_on:
+      a2f-3d-nim:
+        condition: service_healthy
