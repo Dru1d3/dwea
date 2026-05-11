@@ -1,10 +1,24 @@
 import { useEffect, useState } from 'react';
+import type { SpeechEngineChoice } from './speechEngineStorage.js';
+
+export interface SettingsDialogSpeechSettings {
+  /** Current saved engine. `null` means "follow env auto-detect". */
+  engine: SpeechEngineChoice | null;
+  /** Saved Groq key (or empty string when none). */
+  groqApiKey: string;
+  /** True when `VITE_GROQ_API_KEY` is present in the env-built bundle. */
+  envHasGroqKey: boolean;
+}
 
 export interface SettingsDialogProps {
   open: boolean;
   initialKey: string;
   onClose: () => void;
   onSave: (key: string) => void;
+  /** Optional: when provided, the dialog also renders speech-engine controls. */
+  speech?: SettingsDialogSpeechSettings;
+  /** Called with the chosen engine/key when Save is pressed. Required when `speech` is set. */
+  onSaveSpeech?: (next: { engine: SpeechEngineChoice | null; groqApiKey: string }) => void;
 }
 
 // Mask all but the leading prefix and trailing 4 chars so the user can confirm
@@ -15,16 +29,29 @@ function maskKey(key: string): string {
   return `${key.slice(0, 8)}…${key.slice(-4)}`;
 }
 
-export function SettingsDialog({ open, initialKey, onClose, onSave }: SettingsDialogProps) {
+export function SettingsDialog({
+  open,
+  initialKey,
+  onClose,
+  onSave,
+  speech,
+  onSaveSpeech,
+}: SettingsDialogProps) {
   const [key, setKey] = useState(initialKey);
   const [reveal, setReveal] = useState(false);
+  const [engine, setEngine] = useState<SpeechEngineChoice>(speech?.engine ?? 'web-speech');
+  const [groqKey, setGroqKey] = useState<string>(speech?.groqApiKey ?? '');
+  const [revealGroq, setRevealGroq] = useState(false);
 
   useEffect(() => {
     if (open) {
       setKey(initialKey);
       setReveal(false);
+      setEngine(speech?.engine ?? 'web-speech');
+      setGroqKey(speech?.groqApiKey ?? '');
+      setRevealGroq(false);
     }
-  }, [open, initialKey]);
+  }, [open, initialKey, speech?.engine, speech?.groqApiKey]);
 
   if (!open) return null;
 
@@ -81,6 +108,19 @@ export function SettingsDialog({ open, initialKey, onClose, onSave }: SettingsDi
             {reveal ? 'Hide' : 'Show'}
           </button>
         </div>
+
+        {speech && onSaveSpeech ? (
+          <SpeechSection
+            engine={engine}
+            onEngineChange={setEngine}
+            groqKey={groqKey}
+            onGroqKeyChange={setGroqKey}
+            revealGroq={revealGroq}
+            onToggleRevealGroq={() => setRevealGroq((v) => !v)}
+            envHasGroqKey={speech.envHasGroqKey}
+          />
+        ) : null}
+
         <div style={rowStyle}>
           <button type="button" onClick={onClose} style={ghostBtnStyle}>
             Cancel
@@ -89,6 +129,9 @@ export function SettingsDialog({ open, initialKey, onClose, onSave }: SettingsDi
             type="button"
             onClick={() => {
               onSave(key.trim());
+              if (speech && onSaveSpeech) {
+                onSaveSpeech({ engine, groqApiKey: groqKey.trim() });
+              }
               onClose();
             }}
             style={primaryBtnStyle}
@@ -98,6 +141,111 @@ export function SettingsDialog({ open, initialKey, onClose, onSave }: SettingsDi
         </div>
       </dialog>
     </div>
+  );
+}
+
+interface SpeechSectionProps {
+  engine: SpeechEngineChoice;
+  onEngineChange: (next: SpeechEngineChoice) => void;
+  groqKey: string;
+  onGroqKeyChange: (next: string) => void;
+  revealGroq: boolean;
+  onToggleRevealGroq: () => void;
+  envHasGroqKey: boolean;
+}
+
+function SpeechSection({
+  engine,
+  onEngineChange,
+  groqKey,
+  onGroqKeyChange,
+  revealGroq,
+  onToggleRevealGroq,
+  envHasGroqKey,
+}: SpeechSectionProps) {
+  const showGroqField = engine === 'groq';
+  return (
+    <section style={speechSectionStyle} aria-labelledby="settings-speech-title">
+      <h3 id="settings-speech-title" style={{ margin: '0 0 6px 0', fontSize: 13 }}>
+        Speech engine
+      </h3>
+      <p style={{ margin: '0 0 8px 0', fontSize: 12, opacity: 0.75, lineHeight: 1.4 }}>
+        Web Speech is the browser default — fast in Chrome but unsupported in Firefox/Safari and
+        weak on accents. Whisper via{' '}
+        <a
+          href="https://console.groq.com/keys"
+          target="_blank"
+          rel="noreferrer"
+          style={{ color: '#9be7ff' }}
+        >
+          Groq's free tier
+        </a>{' '}
+        works everywhere a mic does and handles non-English better. Stored locally; never sent to
+        OpenRouter. (See DWEA-36.)
+      </p>
+      <fieldset style={fieldsetStyle}>
+        <legend style={legendStyle}>Engine</legend>
+        <label style={radioRowStyle}>
+          <input
+            type="radio"
+            name="dwea-speech-engine"
+            value="web-speech"
+            checked={engine === 'web-speech'}
+            onChange={() => onEngineChange('web-speech')}
+          />
+          <span>
+            <strong>Web Speech</strong>
+            <span style={{ opacity: 0.7 }}> — Chrome/Edge only</span>
+          </span>
+        </label>
+        <label style={radioRowStyle}>
+          <input
+            type="radio"
+            name="dwea-speech-engine"
+            value="groq"
+            checked={engine === 'groq'}
+            onChange={() => onEngineChange('groq')}
+          />
+          <span>
+            <strong>Whisper</strong>
+            <span style={{ opacity: 0.7 }}> — Groq hosted, requires free API key</span>
+          </span>
+        </label>
+      </fieldset>
+      {showGroqField ? (
+        <div style={{ marginTop: 10 }}>
+          <label htmlFor="settings-groq-key" style={subLabelStyle}>
+            Groq API key
+            {envHasGroqKey && groqKey.length === 0 ? (
+              <span style={{ opacity: 0.65, marginLeft: 6 }}>
+                (env key in use — leave blank to keep it)
+              </span>
+            ) : null}
+          </label>
+          <div style={inputRowStyle}>
+            <input
+              id="settings-groq-key"
+              type={revealGroq ? 'text' : 'password'}
+              value={groqKey}
+              onChange={(e) => onGroqKeyChange(e.target.value)}
+              placeholder="gsk_…"
+              autoComplete="off"
+              spellCheck={false}
+              style={inputStyle}
+            />
+            <button
+              type="button"
+              onClick={onToggleRevealGroq}
+              style={revealBtnStyle}
+              aria-pressed={revealGroq}
+              aria-label={revealGroq ? 'Hide Groq key' : 'Show Groq key'}
+            >
+              {revealGroq ? 'Hide' : 'Show'}
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -197,4 +345,43 @@ const primaryBtnStyle: React.CSSProperties = {
   padding: '8px 12px',
   fontWeight: 600,
   cursor: 'pointer',
+};
+
+const speechSectionStyle: React.CSSProperties = {
+  marginTop: 14,
+  padding: 10,
+  borderRadius: 8,
+  border: '1px solid rgba(155, 231, 255, 0.18)',
+  background: 'rgba(0,0,0,0.2)',
+};
+
+const fieldsetStyle: React.CSSProperties = {
+  margin: 0,
+  padding: 0,
+  border: 'none',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 6,
+};
+
+const legendStyle: React.CSSProperties = {
+  fontSize: 12,
+  opacity: 0.75,
+  marginBottom: 4,
+  padding: 0,
+};
+
+const radioRowStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'flex-start',
+  gap: 8,
+  fontSize: 13,
+  cursor: 'pointer',
+};
+
+const subLabelStyle: React.CSSProperties = {
+  display: 'block',
+  fontSize: 12,
+  opacity: 0.8,
+  marginBottom: 4,
 };

@@ -31,8 +31,15 @@ import { type Tuning, loadTuning } from './splats/tuningStore.js';
 import { ChatPanel } from './ui/ChatPanel.js';
 import { SceneTuner } from './ui/SceneTuner.js';
 import { SettingsDialog } from './ui/SettingsDialog.js';
+import {
+  loadGroqApiKey,
+  loadSpeechEngine,
+  saveGroqApiKey,
+  saveSpeechEngine,
+} from './ui/speechEngineStorage.js';
+import { resolveSttConfigFromImportMeta } from './ui/sttProvider.js';
 import { useChat } from './ui/useChat.js';
-import { useMicCapture } from './ui/useMicCapture.js';
+import { type UseMicCaptureProvider, useMicCapture } from './ui/useMicCapture.js';
 import { usePushToTalkHotkey } from './ui/usePushToTalkHotkey.js';
 
 // Eye height ~1.7 m, set back ~10 m, slightly above to read as 'standing in a world'.
@@ -114,6 +121,32 @@ export function App() {
   });
   const [apiKey, setApiKey] = useState<string>(() => loadApiKey());
   const [settingsOpen, setSettingsOpen] = useState<boolean>(() => loadApiKey() === '');
+  const [speechEngine, setSpeechEngine] = useState(() => loadSpeechEngine());
+  const [groqApiKey, setGroqApiKey] = useState(() => loadGroqApiKey());
+  // Env-built `VITE_GROQ_API_KEY` resolution lives in the resolver. We pass the
+  // user-saved engine/key in so a Settings choice wins over the env, and the
+  // resolver's reason string is preserved for dev logs.
+  const sttResolution = useMemo(
+    () => resolveSttConfigFromImportMeta({ engine: speechEngine, groqApiKey }),
+    [speechEngine, groqApiKey],
+  );
+  const envHasGroqKey = useMemo(() => {
+    const meta = (import.meta as { env?: Record<string, string | undefined> }).env;
+    return typeof meta?.VITE_GROQ_API_KEY === 'string' && meta.VITE_GROQ_API_KEY.trim().length > 0;
+  }, []);
+  const micProvider = useMemo<UseMicCaptureProvider>(() => {
+    if (sttResolution.provider === 'groq' && sttResolution.groqApiKey) {
+      const provider: UseMicCaptureProvider = {
+        kind: 'groq',
+        apiKey: sttResolution.groqApiKey,
+      };
+      if (sttResolution.language) {
+        return { ...provider, language: sttResolution.language };
+      }
+      return provider;
+    }
+    return { kind: 'web-speech' };
+  }, [sttResolution]);
 
   // Stable getter so useChat's `send` doesn't churn when Mara moves each frame.
   const npcRef = useRef(npc);
@@ -160,7 +193,7 @@ export function App() {
   const handleTranscript = useCallback((text: string) => {
     sendRef.current(text);
   }, []);
-  const mic = useMicCapture({ onTranscript: handleTranscript });
+  const mic = useMicCapture({ onTranscript: handleTranscript, provider: micProvider });
 
   const canTalk = apiKey.length > 0 && !chat.busy;
   usePushToTalkHotkey({
@@ -173,6 +206,16 @@ export function App() {
     saveApiKey(next);
     setApiKey(next);
   }, []);
+
+  const handleSpeechSettingsSave = useCallback(
+    (next: { engine: typeof speechEngine; groqApiKey: string }) => {
+      saveSpeechEngine(next.engine);
+      saveGroqApiKey(next.groqApiKey);
+      setSpeechEngine(next.engine);
+      setGroqApiKey(next.groqApiKey);
+    },
+    [],
+  );
 
   // T2 — character + physics rig. The ref is read by the intent surface so
   // T3 can dispatch tool calls into it from anywhere outside R3F's render
@@ -282,6 +325,12 @@ export function App() {
         initialKey={apiKey}
         onClose={() => setSettingsOpen(false)}
         onSave={handleApiKeySave}
+        speech={{
+          engine: speechEngine,
+          groqApiKey,
+          envHasGroqKey,
+        }}
+        onSaveSpeech={handleSpeechSettingsSave}
       />
     </>
   );
